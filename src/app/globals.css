@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+@theme {
+  /* === Stitch Design System Colors (Material Design 3 Palette) === */
+  --color-primary: #002045;
+  --color-primary-container: #1a365d;
+  --color-primary-fixed: #d6e3ff;
+  --color-primary-fixed-dim: #adc7f7;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #86a0cd;
+  --color-on-primary-fixed: #001b3c;
+  --color-on-primary-fixed-variant: #2d476f;
+  --color-inverse-primary: #adc7f7;
+
+  --color-secondary: #006c49;
+  --color-secondary-container: #6cf8bb;
+  --color-secondary-fixed: #6ffbbe;
+  --color-secondary-fixed-dim: #4edea3;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #00714d;
+  --color-on-secondary-fixed: #002113;
+  --color-on-secondary-fixed-variant: #005236;
+
+  --color-tertiary: #290069;
+  --color-tertiary-container: #42009f;
+  --color-tertiary-fixed: #e9ddff;
+  --color-tertiary-fixed-dim: #d0bcff;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #ac8bff;
+  --color-on-tertiary-fixed: #23005c;
+  --color-on-tertiary-fixed-variant: #5516be;
+
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+
+  --color-background: #f8f9ff;
+  --color-on-background: #0b1c30;
+  --color-surface: #f8f9ff;
+  --color-surface-bright: #f8f9ff;
+  --color-surface-dim: #cbdbf5;
+  --color-surface-tint: #455f88;
+  --color-surface-variant: #d3e4fe;
+  --color-surface-container: #e5eeff;
+  --color-surface-container-low: #eff4ff;
+  --color-surface-container-high: #dce9ff;
+  --color-surface-container-highest: #d3e4fe;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #43474e;
+  --color-inverse-surface: #213145;
+  --color-inverse-on-surface: #eaf1ff;
+
+  --color-outline: #74777f;
+  --color-outline-variant: #c4c6cf;
+
+  /* === Typography === */
+  --font-family-sans: 'Plus Jakarta Sans', sans-serif;
+
+  --font-size-h1: 36px;
+  --font-size-h2: 28px;
+  --font-size-h3: 20px;
+  --font-size-body-lg: 18px;
+  --font-size-body-md: 16px;
+  --font-size-label-md: 14px;
+  --font-size-caption: 12px;
+
+  /* === Spacing === */
+  --spacing-unit: 8px;
+  --spacing-gutter: 24px;
+  --spacing-margin-mobile: 16px;
+  --spacing-margin-desktop: 40px;
+  --spacing-sidebar-width: 260px;
+  --spacing-container-max: 1440px;
+
+  /* === Border Radius === */
+  --radius-sm: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+/* ===  Base Styles === */
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: #f8f9ff;
+  color: #0b1c30;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Material Symbols === */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* === Glass Effects === */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* === AI Accent Border === */
+.ai-accent {
+  position: relative;
+  border: 1px solid transparent;
+  background: linear-gradient(to right, white, white) padding-box,
+              linear-gradient(135deg, #ac8bff 0%, #42009f 100%) border-box;
+}
+
+.ai-gradient-border {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+}
+.ai-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  background: linear-gradient(45deg, #42009f, #d0bcff, #6cf8bb);
+  border-radius: 18px;
+  opacity: 0.3;
+}
+
+/* === AI Glow Effect === */
+.ai-glow {
+  position: relative;
+}
+.ai-glow::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, #42009f, #ac8bff, #4edea3);
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0.3;
+  filter: blur(8px);
+}
+
+/* === Animations === */
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(0.98); }
+}
+.animate-subtle-pulse {
+  animation: subtle-pulse 3s ease-in-out infinite;
+}
+
+@keyframes step-pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 108, 73, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 108, 73, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 108, 73, 0); }
+}
+.step-pulse {
+  animation: step-pulse 2s infinite;
+}
+
+@keyframes progress-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(-30%); }
+  100% { transform: translateX(0%); }
+}
+
+/* === Custom Shadow (Stitch style) === */
+.shadow-stitch {
+  box-shadow: 0px 4px 20px rgba(26, 54, 93, 0.05);
+}
+
+/* === Scrollbar === */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* === Safe Area Padding === */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
