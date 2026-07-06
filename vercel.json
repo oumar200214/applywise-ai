@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/extract-cv/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/match-score/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

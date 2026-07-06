@@ -3,6 +3,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { getUserPlan } from '@/lib/plan-guard'
 
+// Edge Runtime: I/O wait time (Anthropic API) does NOT count against CPU budget.
+// This lets long generations (30-90s) complete even on Vercel Hobby plan.
+export const runtime = 'edge'
+export const maxDuration = 60
+
 // ─── Anthropic Client ───────────────────────────────────────
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
