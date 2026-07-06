@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@/lib/supabase/server'
+import { getUserPlan } from '@/lib/plan-guard'
 
 // ─── Anthropic Client ───────────────────────────────────────
 const anthropic = new Anthropic({
@@ -105,6 +107,16 @@ function extractJSON(text: string): Record<string, unknown> {
 // ─── POST Handler ───────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
+    // ── Auth ──────────────────────────────────────────────────
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required.', code: 'UNAUTHORIZED' },
+        { status: 401 }
+      )
+    }
+
     // Validate API key is configured
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
@@ -114,7 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { jobTitle, companyName, jobDescription, cvText, selectedOutputs, tone, outputLanguage, plan } = body
+    const { jobTitle, companyName, jobDescription, cvText, tone, outputLanguage } = body
 
     if (!jobTitle || !jobDescription || !cvText) {
       return NextResponse.json(
@@ -123,13 +135,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Input size caps to prevent token abuse
+    if (jobDescription.length > 20000 || cvText.length > 20000) {
+      return NextResponse.json(
+        { error: 'Input too large. Job description and CV must be under 20,000 characters each.', code: 'INPUT_TOO_LARGE' },
+        { status: 400 }
+      )
+    }
+
+    // ── Server-side plan lookup (never trust client) ───────────
+    const plan = await getUserPlan(user.id)
+
     // ── Build Prompt ──────────────────────────────────────────
-    const prompt = `You are an elite Career Strategist, ATS Optimization Expert, and Behavioral Psychologist specializing in recruitment. Your goal is to construct the ultimate application package that maximizes the candidate's chances.
+    const prompt = `You are an elite Career Strategist, ATS Optimization Expert, and Executive Recruiter with 20+ years of experience placing candidates at FAANG, McKinsey, Goldman Sachs, and top-tier firms worldwide. Your goal: produce the OPTIMAL, COMPLETE application package that gives the candidate the maximum competitive edge.
 
 ## CONTEXT
 Job Title: ${jobTitle}
 Company: ${companyName || 'Not specified'}
-Target Language: ${outputLanguage || 'English'}
+Target Language for CV & Letter: ${outputLanguage || 'English'}
 Requested Tone: ${tone || 'Professional'}
 
 ## JOB DESCRIPTION
@@ -138,131 +161,165 @@ ${jobDescription}
 ## RAW CANDIDATE PROFILE
 ${cvText}
 
-## CORE INSTRUCTIONS
+---
 
-### ⚠️ ABSOLUTE RULE — ZERO HALLUCINATION, MAXIMUM EXPLOITATION ⚠️
-You are STRICTLY FORBIDDEN from inventing, fabricating, or hallucinating ANY information that does not appear in the RAW CANDIDATE PROFILE above.
-- NEVER invent fake companies, job titles, dates, degrees, universities, skills, certifications, projects, or achievements.
-- NEVER add experiences or qualifications the candidate does not have.
-- If the candidate has limited experience, work with what they have. A short but honest CV is infinitely better than a fabricated one.
+## ⚠️ ABSOLUTE RULE — ZERO HALLUCINATION, MAXIMUM EXPLOITATION ⚠️
+You are STRICTLY FORBIDDEN from inventing ANY information not present in the RAW CANDIDATE PROFILE.
+- NEVER invent companies, job titles, dates, degrees, schools, skills, certifications, projects, or metrics.
+- If the candidate has limited experience, make every real piece of data shine — a short honest CV beats a fabricated one.
+- You MAY reframe, reword, and elevate existing real data. You may NOT create new facts.
 
-### 📋 MANDATORY CV DATA EXTRACTION CHECKLIST
-Before generating ANYTHING, you MUST first extract ALL of the following from the RAW CANDIDATE PROFILE. Use EVERY piece of real data you find:
+---
 
-1. **Full Name** — Extract the candidate's real name exactly as written.
-2. **Contact Info** — Email, phone, LinkedIn, GitHub, portfolio, address — include everything provided.
-3. **Education** — EVERY degree, university/school name, dates, GPA, honors, relevant coursework — copy them exactly.
-4. **Work Experience** — EVERY job: company name, job title, exact dates, responsibilities, and achievements. Reframe bullet points using the XYZ formula but NEVER change the company, title, or dates.
-5. **Projects** — EVERY project mentioned: name, technologies used, description, outcomes.
-6. **Technical Skills** — EVERY programming language, framework, tool, platform mentioned.
-7. **Soft Skills** — EVERY interpersonal skill, leadership experience, or teamwork evidence.
-8. **Languages** — EVERY language spoken and proficiency level.
-9. **Certifications** — EVERY certification, license, or training.
-10. **Volunteering / Extracurriculars** — EVERY volunteer role, club, association.
-11. **Publications / Awards** — ANY paper, award, competition, or recognition.
+## STEP 1 — MANDATORY DATA EXTRACTION
+Before generating, extract ALL of the following from the RAW CANDIDATE PROFILE:
+1. Full legal name (exactly as written)
+2. ALL contact details: email, phone, LinkedIn, GitHub, portfolio, city/country
+3. ALL work experiences: company name, exact job title, exact dates (month/year), ALL responsibilities mentioned
+4. ALL education: degree name, institution, graduation year, GPA if mentioned, honors, relevant courses
+5. ALL projects: name, technologies, outcomes, dates
+6. ALL technical skills: languages, frameworks, tools, platforms, cloud services, databases
+7. ALL soft skills and leadership evidence
+8. ALL languages with proficiency levels
+9. ALL certifications, licenses, training
+10. ALL volunteering, extracurriculars, associations, awards
 
-### YOUR JOB IS TO OPTIMIZE, NOT INVENT
-Take the REAL data extracted above and:
-- Rewrite bullet points to be impactful using the XYZ formula: "Accomplished [X] as measured by [Y], by doing [Z]"
-- Reorder sections to put the most relevant experience for THIS specific job first
-- Inject ATS keywords from the job description naturally into the existing real experience
-- Highlight transferable skills that match the job requirements
-- Quantify achievements where the data supports it (but NEVER invent metrics)
+---
 
-1. THE MATCH SCORE (BRUTALLY HONEST & CONTEXTUAL)
-Act as a strict, top-tier recruiter. Calculate a highly accurate, realistic match score (0-100) reflecting the candidate's ACTUAL chances of getting an interview. 
-- Do NOT just do simple keyword matching. 
-- Analyze market standards: factor in university prestige (e.g., target schools vs non-target for elite industries like Investment Banking), previous company caliber (FAANG, top tier vs unknown), tenure, and career trajectory.
-- A candidate with a short CV but elite pedigree applying to a matching elite firm should score higher than a keyword-stuffed CV from an unrelated background. Be completely honest and contextual.
+## STEP 2 — CV GENERATION (PREMIUM QUALITY — ATS-OPTIMIZED)
 
-2. THE TAILORED CV (ATS-OPTIMIZED & PERFECT FIT)
-Create a CV structure in clean, RAW text format designed to flawlessly parse through any ATS (Taleo, Workday, Greenhouse).
-- You MUST include the candidate's REAL name, REAL contact info, REAL education, REAL work experience, REAL projects, REAL skills — everything from the checklist above.
-- Reframe and elevate the candidate's ACTUAL experience to construct the "ideal profile" for THIS specific job without fabricating facts.
-- Emphasize and aggressively highlight the exact skills and achievements that align with the core needs of the role. Transform weak points into relevant strengths where possible.
-- Seamlessly inject critical ATS keywords extracted from the job description. Do not keyword-stuff unnaturally, but ensure maximum ATS density.
-- The 'full_cv_text' must be a complete, perfectly formatted RAW text CV containing ALL the candidate's real information, ready to export to .docx.
+### MANDATORY EXPERIENCE FORMAT — FOLLOW EXACTLY:
+For EACH work experience, write in this PRECISE format (the parser depends on it):
+**[Company Name]** | [Job Title] | [Month Year] – [Month Year or Présent/Present]
+• [Achievement using XYZ: "Accomplished X measured by Y by doing Z" — quantify when data supports it]
+• [Achievement 2 — inject a relevant ATS keyword from the job description naturally]
+• [Achievement 3 — emphasize transferable skill matching the role]
+• [Achievement 4]
+• [Achievement 5 — minimum 3 bullets, maximum 6 per role]
 
-3. THE COVER LETTER (NATURAL & HYPER-PERSUASIVE)
-Write an honest yet extremely persuasive cover letter using the candidate's REAL background:
-- Use the candidate's REAL name in the signature.
-- Reference their REAL companies, roles, and achievements — not invented ones.
-- Hook the reader immediately (skip generic "I am writing to apply..." openings).
-- Authority/Credibility: Quickly establish competence with a hard-hitting REAL metric or achievement.
-- Liking/Affinity: Show deep, genuine alignment with the company's specific mission, culture, or recent news.
-- Scarcity/Uniqueness: Frame the candidate's unique blend of REAL skills and experiences as a rare and highly valuable asset.
-- Keep it concise, natural, and compelling.
+Rules:
+- ENRICH sparse bullet points using contextual inference but NEVER invent facts
+- REORDER experiences so the most relevant one appears FIRST
+- Each bullet must contain at least one ATS keyword from the job description where genuinely applicable
 
-You MUST respond with ONLY valid JSON (no markdown, no explanation, no code fences). The JSON must match this exact structure:
+### MANDATORY EDUCATION FORMAT:
+**[Degree/Diploma]** — [Institution Name] | [Year or Year Range]
+[Relevant coursework / GPA / honors / distinction if provided]
+
+### MANDATORY SKILLS FORMAT — CATEGORIZED:
+Compétences techniques : [comma-separated: languages, frameworks, libraries]
+Outils & Plateformes : [tools, cloud, databases, IDEs, software]
+Méthodes : [Agile, Scrum, Lean, CI/CD etc if applicable]
+Compétences transversales : [leadership, communication, etc]
+
+(Adapt category names to the target language if not French)
+
+### SUMMARY REQUIREMENTS:
+Write 4-5 powerful sentences:
+1. Hook: value proposition tied to THIS specific role
+2. Experience overview: years + domain expertise
+3. Key technical match: 2-3 skills from JD that the candidate genuinely has
+4. Differentiator: what makes this candidate stand out for THIS company
+5. Forward-looking: eagerness + alignment with company mission
+
+### CONTENT VOLUME REQUIREMENT:
+The CV must fill a minimum of 2 FULL A4 PAGES (approximately 3,500+ characters across all sections).
+Generate comprehensive, detailed content — not bare minimum.
+
+---
+
+## STEP 3 — MATCH SCORE (BRUTALLY HONEST)
+Calculate a rigorous, contextual score (0-100) based on:
+- Keyword match between candidate skills and JD requirements
+- Seniority alignment (years of experience vs. required level)
+- Company/university prestige caliber for the target company
+- Career trajectory fit (is this a natural progression?)
+- Missing critical requirements that are hard to compensate
+
+---
+
+## STEP 4 — COVER LETTER (HYPER-PERSUASIVE)
+- Use REAL name in signature, REAL companies and achievements
+- Skip generic openings — start with a powerful hook
+- Apply Cialdini's principles: Authority, Liking, Scarcity
+- Maximum 4 paragraphs, natural and compelling
+
+---
+
+You MUST respond with ONLY valid JSON (no markdown, no explanation, no code fences). Exact structure:
 {
-  "match_score": <number 0-100 (realistic, rigorous, and contextual)>,
-  "strong_fit_areas": ["area1", "area2", "area3"],
+  "match_score": <number 0-100>,
+  "strong_fit_areas": ["area1", "area2", "area3", "area4"],
   "missing_skills": ["skill1", "skill2"],
-  "ats_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
-  "ai_summary": "<strategic fit summary detailing the brutal truth about their chances and why, considering their background vs the company profile>",
-  "recommended_action": "<one-line strategic recommendation to maximize their chances>",
+  "ats_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6"],
+  "ai_summary": "<strategic fit summary — honest, contextual, specific>",
+  "recommended_action": "<one concrete strategic action to maximize chances>",
   "tailored_cv": {
-    "header_section": "<Name | Title | Contact info in raw parseable format>",
-    "summary_section": "<High-impact ATS-optimized professional summary>",
-    "education_section": "<Clean, standard ATS format: Degree, School, Year>",
-    "experience_section": "<Company - Title - Dates\\n- Bullet points using XYZ formula focusing on perfect-fit traits>",
-    "projects_section": "<Relevant projects formatted cleanly>",
-    "skills_section": "<Categorized comma-separated skills for perfect ATS parsing>",
-    "certifications_section": "<Certifications cleanly formatted>",
-    "languages_section": "<Languages cleanly formatted>",
-    "full_cv_text": "<The complete, perfectly formatted RAW text CV ready to be exported to .docx without parsing issues>"
+    "header_section": "<Full Name on first line, then contact details on subsequent lines: email | phone | LinkedIn | city>",
+    "summary_section": "<4-5 sentence high-impact ATS-optimized professional summary>",
+    "education_section": "<Each degree on its own entry using the MANDATORY FORMAT above>",
+    "experience_section": "<ALL experiences using the MANDATORY FORMAT above — minimum 3 bullets per role>",
+    "projects_section": "<Each project: Name | Technologies | Year\\n• Outcome/achievement bullet points>",
+    "skills_section": "<Using the MANDATORY CATEGORIZED FORMAT above>",
+    "certifications_section": "<One certification per line: Name — Issuer — Year>",
+    "languages_section": "<One language per line: Language — Proficiency level>",
+    "full_cv_text": "<Complete perfectly formatted raw text version of the entire CV, ready for DOCX export>"
   },
   "cover_letter": {
-    "opening_paragraph": "<Psychological hook>",
-    "body_paragraph_1": "<Authority and exact experience match>",
-    "body_paragraph_2": "<Liking, culture fit, and uniqueness>",
-    "closing_paragraph": "<Call to action>",
-    "full_letter_text": "<Complete cohesive letter>"
+    "opening_paragraph": "<Powerful psychological hook — not 'I am writing to apply'>",
+    "body_paragraph_1": "<Authority: credibility via real metric or elite achievement>",
+    "body_paragraph_2": "<Liking + Scarcity: cultural fit + unique value proposition>",
+    "closing_paragraph": "<Confident call to action>",
+    "full_letter_text": "<Complete cohesive letter as single flowing text>"
   },
   "interview_pack": {
-    "general_questions": ["q1", "q2", "q3"],
-    "behavioral_questions": ["q1", "q2", "q3"],
-    "technical_questions": ["q1", "q2"],
-    "company_questions": ["q1", "q2"],
+    "general_questions": ["q1", "q2", "q3", "q4"],
+    "behavioral_questions": ["q1", "q2", "q3", "q4"],
+    "technical_questions": ["q1", "q2", "q3"],
+    "company_questions": ["q1", "q2", "q3"],
     "suggested_answers": ["a1", "a2", "a3"],
-    "star_answers": ["star1", "star2"],
+    "star_answers": ["SITUATION: ... ACTION: ... RESULT: ...", "SITUATION: ... ACTION: ... RESULT: ..."],
     "questions_to_ask_recruiter": ["q1", "q2", "q3"],
-    "interview_summary": "<interview preparation summary>"
+    "interview_summary": "<preparation summary with key focus areas>"
   },
   "skill_gap_analysis": {
-    "required_skills": ["s1", "s2"],
+    "required_skills": ["s1", "s2", "s3"],
     "user_skills": ["s1", "s2"],
     "missing_skills": ["s1", "s2"],
     "priority_skills": ["s1"],
-    "skill_gap_summary": "<summary>",
-    "seven_day_plan": "<day-by-day plan>"
+    "skill_gap_summary": "<honest gap analysis with actionable next steps>",
+    "seven_day_plan": "<Day 1: ... Day 2: ... Day 3: ... Day 4: ... Day 5: ... Day 6-7: ...>"
   },
   "course_recommendations": [
     {
       "skill": "<skill name>",
-      "reason": "<why this course>",
+      "reason": "<why this matters for this specific role>",
       "level": "Beginner|Intermediate|Advanced",
-      "recommended_search_query": "<search query for finding courses>"
+      "recommended_search_query": "<optimized YouTube/Udemy search query>"
     }
   ]
 }
 
 ${plan === 'free' ? `
-IMPORTANT ACCOUNT LIMITATION (FREE PLAN): 
-The user is currently on the FREE tier. You MUST limit the generation significantly to save computational resources. 
-- Do NOT generate 'full_cv_text' or 'full_letter_text' (leave them empty strings or put a placeholder like "Upgrade to Premium to view your tailored CV").
-- Keep 'interview_pack' questions to exactly 1 question per category.
-- Keep 'course_recommendations' to exactly 1 course.
-- Keep the 'ai_summary' short and direct.
+ACCOUNT TIER: FREE
+Limit generation to save resources:
+- Set full_cv_text and full_letter_text to "" (empty)
+- 1 question per interview category only
+- 1 course recommendation only
+- Keep ai_summary to 2 sentences
+- Keep experience bullets to 2 per role max
 ` : `
-ACCOUNT TIER: PREMIUM
-Generate the complete and exhaustive response. Do not hold back on the quality, length, and detail of the CV and Cover letter.
+ACCOUNT TIER: PRO/PREMIUM — Generate a COMPLETE, EXHAUSTIVE, TOP-QUALITY response.
+- Every experience entry must have 4-6 detailed bullet points
+- The full_cv_text must be the complete formatted CV (all sections)
+- The full_letter_text must be the complete cover letter
+- Be comprehensive, specific, and deeply tailored to the exact JD and company
 `}
 `
 
     // ── Call Anthropic API ─────────────────────────────────────
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 16384,
       messages: [{ role: 'user', content: prompt }],
     })

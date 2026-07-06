@@ -117,7 +117,7 @@ Retourne un JSON complet respectant EXACTEMENT cette structure TypeScript :
 
     // ── Appel Claude ──────────────────────────────────────────────────────
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],

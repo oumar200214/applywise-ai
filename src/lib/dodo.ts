@@ -1,12 +1,13 @@
 import DodoPayments from 'dodopayments'
 
 // ── Client Dodo centralisé ──────────────────────────────────────────────────
-// Utilise la clé test en développement, la clé live en production.
+const isProduction = process.env.NODE_ENV === 'production'
+
 export const dodo = new DodoPayments({
-  bearerToken:
-    process.env.NODE_ENV === 'production'
-      ? process.env.DODO_PAYMENTS_API_KEY!
-      : process.env.DODO_PAYMENTS_API_KEY_TEST!,
+  bearerToken: isProduction
+    ? process.env.DODO_PAYMENTS_API_KEY!
+    : process.env.DODO_PAYMENTS_API_KEY_TEST!,
+  environment: (process.env.DODO_PAYMENTS_ENVIRONMENT as 'live_mode' | 'test_mode') ?? (isProduction ? 'live_mode' : 'test_mode'),
 })
 
 // ── Catalogue des plans ─────────────────────────────────────────────────────

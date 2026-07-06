@@ -8,16 +8,16 @@ export function useDocxGenerator() {
   const [error, setError] = useState<string | null>(null);
 
   async function generateDocx(params: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    userProfile: any;
-    jobDescription: string;
     documentType: DocumentType;
+    // Contenu pré-généré depuis AIGenerationResponse — pas besoin de rappeler l'IA
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    matchScoreResult?: any;
+    cvContent?: any;       // tailored_cv object
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    coverLetterContent?: any; // cover_letter object
   }) {
     setIsGenerating(true);
     setError(null);
-    const loadingToast = toast.loading("Génération de votre document professionnel...");
+    const loadingToast = toast.loading("Génération du document .docx...");
 
     try {
       const response = await fetch("/api/generate-docx", {
@@ -28,10 +28,13 @@ export function useDocxGenerator() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Cas plan insuffisant
+        if (response.status === 403) {
+          throw new Error("Export .docx réservé au plan Pro ou Premium. Passez à Pro pour débloquer.");
+        }
         throw new Error(errorData.error || "Erreur de génération");
       }
 
-      // Téléchargement automatique du fichier .docx
       const blob = await response.blob();
       const filename = response.headers
         .get("Content-Disposition")
@@ -46,7 +49,7 @@ export function useDocxGenerator() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success("Document généré avec succès !", { id: loadingToast });
+      toast.success("Document téléchargé !", { id: loadingToast });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Erreur inconnue";
       setError(errorMessage);

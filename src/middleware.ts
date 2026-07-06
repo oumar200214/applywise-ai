@@ -43,14 +43,19 @@ export async function middleware(request: NextRequest) {
 
   // Refresh session — IMPORTANT: do not remove
   let user = null
+  let supabaseUnreachable = false
   try {
     const { data } = await supabase.auth.getUser()
     user = data?.user ?? null
   } catch {
     // Supabase unreachable (project paused, network issue, etc.)
-    // Allow the request through — pages will handle auth state client-side
+    // Must return early — do NOT fall through with user=null or protected routes get blocked
+    supabaseUnreachable = true
     console.warn('[Middleware] Supabase unreachable, skipping auth check')
   }
+
+  // If Supabase is down, allow request unconditionally — client pages handle their own auth
+  if (supabaseUnreachable) return supabaseResponse
 
   const { pathname } = request.nextUrl
 

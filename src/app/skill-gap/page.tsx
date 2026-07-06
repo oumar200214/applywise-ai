@@ -2,14 +2,22 @@
 import { useState, useEffect } from 'react'
 import AppLayout from '@/components/AppLayout'
 import Link from 'next/link'
-import { getApplications, getGenerationResult } from '@/lib/storage'
+import { dbGetApplications, dbGetGenerationResult } from '@/lib/db'
+
+type SkillEntry = { skill: string; company: string; role: string }
 
 type SkillGapData = {
-  strongSkills: { skill: string; level: number }[];
-  missingSkills: { skill: string; level: number; priority: string; company: string; role: string }[];
-  matchedCount: number;
-  missingCount: number;
-  avgProficiency: number;
+  strongSkills: SkillEntry[]
+  missingSkills: (SkillEntry & { priority: 'High' | 'Medium' | 'Low' })[]
+  matchedCount: number
+  missingCount: number
+  avgMatchScore: number
+}
+
+const priorityLabels: Record<string, string> = {
+  High: 'Élevée',
+  Medium: 'Moyenne',
+  Low: 'Faible',
 }
 
 export default function SkillGapPage() {
@@ -17,70 +25,73 @@ export default function SkillGapPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const apps = getApplications()
-    
-    // In a real app we'd compute this from a complex user profile + all apps.
-    // Here we'll aggregate from recent generated applications.
-    const strongSkillsSet = new Set<string>()
-    const missingSkillsList: any[] = []
-    
-    let totalScore = 0
-    let appsWithScore = 0
+    async function compute() {
+      const apps = await dbGetApplications()
 
-    apps.forEach(app => {
-      if (app.matchScore) {
-        totalScore += app.matchScore
-        appsWithScore++
-      }
-      
-      const result = getGenerationResult(app.id)
-      if (result && result.data) {
-        // Collect strong areas
-        if (result.data.strong_fit_areas) {
-          result.data.strong_fit_areas.forEach((area: string) => strongSkillsSet.add(area))
+      const strongSet = new Map<string, { company: string; role: string }>()
+      const missingMap = new Map<string, { company: string; role: string; priority: 'High' | 'Medium' | 'Low' }>()
+
+      let totalScore = 0
+      let appsWithScore = 0
+
+      for (const app of apps) {
+        if (app.matchScore) {
+          totalScore += app.matchScore
+          appsWithScore++
         }
-        
-        // Collect missing skills
-        if (result.data.missing_skills || (result.data.skill_gap_analysis && result.data.skill_gap_analysis.missing_skills)) {
-          const gaps = result.data.skill_gap_analysis?.missing_skills || result.data.missing_skills || []
-          gaps.forEach((gap: string) => {
-            missingSkillsList.push({
-              skill: gap,
-              level: Math.floor(Math.random() * 30) + 20, // Mocking current level for UI
-              priority: 'High', // Defaulting to high for direct missing skills
-              company: app.companyName || 'Unknown',
-              role: app.jobTitle
-            })
-          })
-        }
+
+        const result = await dbGetGenerationResult(app.id)
+        if (!result?.data) continue
+
+        const d = result.data
+
+        const fitAreas: string[] = d.strong_fit_areas ?? []
+        fitAreas.forEach(area => {
+          if (!strongSet.has(area)) {
+            strongSet.set(area, { company: app.companyName || '—', role: app.jobTitle })
+          }
+        })
+
+        const gap = d.skill_gap_analysis ?? {}
+        const prioritySkills: string[] = gap.priority_skills ?? []
+        const missingSkills: string[] = gap.missing_skills ?? d.missing_skills ?? []
+
+        missingSkills.forEach((skill, i) => {
+          if (!missingMap.has(skill)) {
+            const priority: 'High' | 'Medium' | 'Low' =
+              prioritySkills.includes(skill) ? 'High'
+              : i < 3 ? 'Medium'
+              : 'Low'
+            missingMap.set(skill, { company: app.companyName || '—', role: app.jobTitle, priority })
+          }
+        })
       }
-    })
 
-    // Remove duplicates from missing skills
-    const uniqueMissing = missingSkillsList.filter((v, i, a) => a.findIndex(t => (t.skill === v.skill)) === i)
-    
-    const strongArr = Array.from(strongSkillsSet).map(s => ({
-      skill: s.length > 30 ? s.substring(0, 30) + '...' : s, // Truncate long descriptions
-      level: Math.floor(Math.random() * 20) + 80 // Mocking high proficiency for UI
-    }))
+      setData({
+        strongSkills: Array.from(strongSet.entries()).map(([skill, meta]) => ({ skill, ...meta })),
+        missingSkills: Array.from(missingMap.entries()).map(([skill, meta]) => ({ skill, ...meta })),
+        matchedCount: strongSet.size,
+        missingCount: missingMap.size,
+        avgMatchScore: appsWithScore > 0 ? Math.round(totalScore / appsWithScore) : 0,
+      })
+      setLoading(false)
+    }
 
-    setData({
-      strongSkills: strongArr,
-      missingSkills: uniqueMissing,
-      matchedCount: strongArr.length,
-      missingCount: uniqueMissing.length,
-      avgProficiency: appsWithScore > 0 ? Math.round(totalScore / appsWithScore) : 0
-    })
-    
-    setLoading(false)
+    compute()
   }, [])
+
+  const priorityColor = {
+    High: 'bg-error-container text-error',
+    Medium: 'bg-amber-100 text-amber-700',
+    Low: 'bg-slate-100 text-slate-500',
+  }
 
   return (
     <AppLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-[36px] font-bold text-primary leading-tight tracking-tight">Skill Gap Analysis</h1>
-          <p className="text-base text-slate-500 mt-2">Identify your skill gaps across all your applications and get personalized learning recommendations.</p>
+          <h1 className="text-[36px] font-bold text-primary leading-tight tracking-tight">Analyse des compétences</h1>
+          <p className="text-base text-slate-500 mt-2">Identifiez vos lacunes de compétences sur toutes vos candidatures et obtenez des recommandations d&apos;apprentissage personnalisées.</p>
         </div>
 
         {loading ? (
@@ -88,79 +99,66 @@ export default function SkillGapPage() {
         ) : !data || (data.matchedCount === 0 && data.missingCount === 0) ? (
           <div className="bg-white rounded-2xl shadow-stitch border border-slate-100 p-16 text-center">
             <span className="material-symbols-outlined text-6xl text-slate-200 mb-4 block">analytics</span>
-            <p className="text-lg font-semibold text-slate-500 mb-2">No skill data available</p>
-            <p className="text-sm text-slate-400 mb-6">Generate an application with AI to analyze your skill gaps.</p>
+            <p className="text-lg font-semibold text-slate-500 mb-2">Aucune donnée de compétences disponible</p>
+            <p className="text-sm text-slate-400 mb-6">Générez une candidature avec l&apos;IA pour analyser vos compétences.</p>
             <Link href="/new-application" className="inline-flex items-center gap-2 bg-primary-container text-white px-6 py-3 rounded-xl text-sm font-bold hover:opacity-90 transition-all">
-              <span className="material-symbols-outlined text-lg">add_circle</span>Create Application
+              <span className="material-symbols-outlined text-lg">add_circle</span>Créer une candidature
             </Link>
           </div>
         ) : (
           <>
-            {/* Overview Cards */}
+            {/* Vue d'ensemble */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-stitch border border-slate-100 text-center">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Strong Areas</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Points forts</p>
                 <p className="text-3xl font-bold text-secondary">{data.matchedCount}</p>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-stitch border border-slate-100 text-center">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Skills to Develop</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Compétences à développer</p>
                 <p className="text-3xl font-bold text-amber-500">{data.missingCount}</p>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-stitch border border-slate-100 text-center">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Avg. Application Match</p>
-                <p className="text-3xl font-bold text-primary">{data.avgProficiency}%</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Score moyen</p>
+                <p className="text-3xl font-bold text-primary">{data.avgMatchScore}%</p>
               </div>
             </div>
 
-            {/* Skills Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Strong Skills */}
+              {/* Points forts */}
               <div className="bg-white p-6 rounded-2xl shadow-stitch border border-slate-100">
                 <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary">check_circle</span>
-                  Your Strong Areas
+                  <span className="material-symbols-outlined text-secondary">check_circle</span>Vos points forts
                 </h3>
                 {data.strongSkills.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic">No strong areas identified yet.</p>
+                  <p className="text-sm text-slate-500 italic">Aucun point fort identifié pour l&apos;instant.</p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {data.strongSkills.slice(0, 8).map((s, i) => (
-                      <div key={i} className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-semibold text-slate-700">{s.skill}</span>
-                          <span className="text-secondary font-bold">{s.level}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-secondary rounded-full" style={{ width: `${s.level}%` }}></div>
-                        </div>
+                      <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-sm font-semibold text-primary">{s.skill}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{s.role} chez {s.company}</p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Gap Skills */}
+              {/* Compétences manquantes */}
               <div className="bg-white p-6 rounded-2xl shadow-stitch border border-slate-100">
                 <h3 className="text-lg font-bold text-primary mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-amber-500">trending_up</span>
-                  Skills to Improve
+                  <span className="material-symbols-outlined text-amber-500">trending_up</span>Compétences à améliorer
                 </h3>
                 {data.missingSkills.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic">No skill gaps identified! Great job.</p>
+                  <p className="text-sm text-slate-500 italic">Aucun écart identifié ! Excellent travail.</p>
                 ) : (
                   <div className="space-y-3">
                     {data.missingSkills.slice(0, 8).map((s, i) => (
                       <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-sm font-semibold text-primary">{s.skill}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            s.priority === 'High' ? 'bg-error-container text-error' : s.priority === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-                          }`}>{s.priority}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${priorityColor[s.priority]}`}>{priorityLabels[s.priority]}</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 mb-2">Required for: {s.role} at {s.company}</p>
-                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-amber-400 rounded-full" style={{ width: `${s.level}%` }}></div>
-                        </div>
+                        <p className="text-[10px] text-slate-400">Requis pour : {s.role} chez {s.company}</p>
                       </div>
                     ))}
                   </div>

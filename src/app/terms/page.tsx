@@ -10,9 +10,9 @@ export default function TermsPage() {
         <div className="max-w-[1440px] mx-auto flex justify-between items-center px-6 py-3">
           <Link href="/" className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <span className="text-xl font-black tracking-tight text-primary-container">ApplyWise AI</span>
+            <span className="text-xl font-black tracking-tight text-primary-container">Postulis</span>
           </Link>
-          <Link href="/" className="text-sm font-semibold text-primary-container hover:opacity-80 transition-opacity">← Back to Home</Link>
+          <Link href="/" className="text-sm font-semibold text-primary-container hover:opacity-80 transition-opacity">â† Back to Home</Link>
         </div>
       </header>
 
@@ -24,13 +24,13 @@ export default function TermsPage() {
           {/* 1 */}
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">1. Acceptance of Terms</h2>
-            <p>By accessing or using ApplyWise AI (&quot;the Service&quot;), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service. We reserve the right to update these terms at any time, and your continued use of the Service constitutes acceptance of any modifications.</p>
+            <p>By accessing or using Postulis (&quot;the Service&quot;), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our Service. We reserve the right to update these terms at any time, and your continued use of the Service constitutes acceptance of any modifications.</p>
           </section>
 
           {/* 2 */}
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">2. Description of Service</h2>
-            <p>ApplyWise AI is an AI-powered job application assistant that helps users generate tailored CVs, cover letters, interview preparation materials, and skill gap analyses based on job descriptions and user-provided profile information. The Service uses third-party AI models (including Anthropic&apos;s Claude) to generate content.</p>
+            <p>Postulis is an AI-powered job application assistant that helps users generate tailored CVs, cover letters, interview preparation materials, and skill gap analyses based on job descriptions and user-provided profile information. The Service uses third-party AI models (including Anthropic&apos;s Claude) to generate content.</p>
           </section>
 
           {/* 3 */}
@@ -74,7 +74,7 @@ export default function TermsPage() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Content you provide (CV text, profile information) remains your property.</li>
               <li>AI-generated outputs (tailored CVs, cover letters, etc.) are licensed to you for personal, non-commercial use related to job applications.</li>
-              <li>The ApplyWise AI brand, logo, design, and underlying technology remain our exclusive property.</li>
+              <li>The Postulis brand, logo, design, and underlying technology remain our exclusive property.</li>
             </ul>
           </section>
 
@@ -82,14 +82,14 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">7. AI-Generated Content Disclaimer</h2>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm">
-              <p><strong>Important:</strong> AI-generated content is provided &quot;as is&quot; for assistance purposes only. While we strive for accuracy, the AI may occasionally produce imperfect results. You are solely responsible for reviewing, editing, and verifying all generated content before submitting it to employers. ApplyWise AI does not guarantee job placement or interview outcomes.</p>
+              <p><strong>Important:</strong> AI-generated content is provided &quot;as is&quot; for assistance purposes only. While we strive for accuracy, the AI may occasionally produce imperfect results. You are solely responsible for reviewing, editing, and verifying all generated content before submitting it to employers. Postulis does not guarantee job placement or interview outcomes.</p>
             </div>
           </section>
 
           {/* 8 */}
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">8. Limitation of Liability</h2>
-            <p>To the maximum extent permitted by law, ApplyWise AI shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, employment opportunities, or goodwill, arising out of or in connection with your use of the Service.</p>
+            <p>To the maximum extent permitted by law, Postulis shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, employment opportunities, or goodwill, arising out of or in connection with your use of the Service.</p>
           </section>
 
           {/* 9 */}
@@ -101,7 +101,7 @@ export default function TermsPage() {
           {/* 10 */}
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">10. Contact</h2>
-            <p>For questions about these Terms, please contact us at <a href="mailto:support@applywise.ai" className="text-primary-container font-semibold hover:underline">support@applywise.ai</a>.</p>
+            <p>For questions about these Terms, please contact us at <a href="mailto:support@postulis.io" className="text-primary-container font-semibold hover:underline">support@postulis.io</a>.</p>
           </section>
         </div>
       </main>
@@ -113,7 +113,7 @@ export default function TermsPage() {
           <Link href="/privacy" className="hover:text-primary transition-colors font-semibold">Privacy Policy</Link>
           <Link href="/pricing" className="hover:text-primary transition-colors font-semibold">Pricing</Link>
         </div>
-        <p>© {new Date().getFullYear()} ApplyWise AI. All rights reserved.</p>
+        <p>Â© {new Date().getFullYear()} Postulis. All rights reserved.</p>
       </footer>
     </div>
   )

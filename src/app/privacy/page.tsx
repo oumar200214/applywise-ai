@@ -10,9 +10,9 @@ export default function PrivacyPage() {
         <div className="max-w-[1440px] mx-auto flex justify-between items-center px-6 py-3">
           <Link href="/" className="flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <span className="text-xl font-black tracking-tight text-primary-container">ApplyWise AI</span>
+            <span className="text-xl font-black tracking-tight text-primary-container">Postulis</span>
           </Link>
-          <Link href="/" className="text-sm font-semibold text-primary-container hover:opacity-80 transition-opacity">← Back to Home</Link>
+          <Link href="/" className="text-sm font-semibold text-primary-container hover:opacity-80 transition-opacity">â† Back to Home</Link>
         </div>
       </header>
 
@@ -24,7 +24,7 @@ export default function PrivacyPage() {
           {/* 1 */}
           <section>
             <h2 className="text-lg font-bold text-primary mb-3">1. Introduction</h2>
-            <p>ApplyWise AI (&quot;we&quot;, &quot;our&quot;, &quot;us&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, store, and share your personal information when you use our AI-powered job application assistant.</p>
+            <p>Postulis (&quot;we&quot;, &quot;our&quot;, &quot;us&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, store, and share your personal information when you use our AI-powered job application assistant.</p>
           </section>
 
           {/* 2 */}
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-sm">To exercise any of these rights, contact us at <a href="mailto:privacy@applywise.ai" className="text-primary-container font-semibold hover:underline">privacy@applywise.ai</a>.</p>
+            <p className="mt-4 text-sm">To exercise any of these rights, contact us at <a href="mailto:privacy@postulis.io" className="text-primary-container font-semibold hover:underline">privacy@postulis.io</a>.</p>
           </section>
 
           {/* 8 */}
@@ -141,8 +141,8 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-bold text-primary mb-3">11. Contact Us</h2>
             <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
               <p className="mb-2">For any privacy-related questions or requests:</p>
-              <p className="text-sm"><strong>Email:</strong> <a href="mailto:privacy@applywise.ai" className="text-primary-container font-semibold hover:underline">privacy@applywise.ai</a></p>
-              <p className="text-sm"><strong>Support:</strong> <a href="mailto:support@applywise.ai" className="text-primary-container font-semibold hover:underline">support@applywise.ai</a></p>
+              <p className="text-sm"><strong>Email:</strong> <a href="mailto:privacy@postulis.io" className="text-primary-container font-semibold hover:underline">privacy@postulis.io</a></p>
+              <p className="text-sm"><strong>Support:</strong> <a href="mailto:support@postulis.io" className="text-primary-container font-semibold hover:underline">support@postulis.io</a></p>
             </div>
           </section>
         </div>
@@ -155,7 +155,7 @@ export default function PrivacyPage() {
           <Link href="/privacy" className="hover:text-primary transition-colors font-semibold">Privacy Policy</Link>
           <Link href="/pricing" className="hover:text-primary transition-colors font-semibold">Pricing</Link>
         </div>
-        <p>© {new Date().getFullYear()} ApplyWise AI. All rights reserved.</p>
+        <p>Â© {new Date().getFullYear()} Postulis. All rights reserved.</p>
       </footer>
     </div>
   )

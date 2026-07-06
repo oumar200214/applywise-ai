@@ -92,21 +92,20 @@ async function activatePlan(payload: AnyPayload) {
   const planInterval = getPlanInterval(planKey)
   const expiresAt = computeExpiryDate(planKey)
 
-  // Mise à jour via user_id (depuis metadata) ou email comme fallback
+  // Always use user_id from metadata (set at checkout creation)
   const userId = metadata?.userId
-  const query = supabase.from('users_profile').update({
+  if (!userId) {
+    console.error('[WEBHOOK] userId manquant dans metadata — activation impossible pour:', customer.email)
+    return
+  }
+
+  await supabase.from('users_profile').update({
     plan: planName,
     plan_interval: planInterval,
     subscription_id: subscriptionId ?? null,
     plan_activated_at: new Date().toISOString(),
     plan_expires_at: expiresAt.toISOString(),
-  })
-
-  if (userId) {
-    await query.eq('user_id', userId)
-  } else {
-    await query.eq('email', customer.email)
-  }
+  }).eq('user_id', userId)
 
   console.log(`[WEBHOOK] Plan activé: ${planName} (${planInterval}) pour ${customer.email}`)
 }
@@ -120,18 +119,17 @@ async function revokePlan(payload: AnyPayload) {
   if (!customer?.email) return
 
   const userId = metadata?.userId
-  const query = supabase.from('users_profile').update({
+  if (!userId) {
+    console.error('[WEBHOOK] userId manquant dans metadata — révocation impossible pour:', customer.email)
+    return
+  }
+
+  await supabase.from('users_profile').update({
     plan: 'free',
     subscription_id: null,
     plan_expires_at: null,
     plan_interval: null,
-  })
-
-  if (userId) {
-    await query.eq('user_id', userId)
-  } else {
-    await query.eq('email', customer.email)
-  }
+  }).eq('user_id', userId)
 
   console.log(`[WEBHOOK] Plan révoqué → free pour ${customer.email}`)
 }

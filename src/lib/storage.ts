@@ -1,18 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * ApplyWise AI — localStorage Data Persistence
+ * Postulis — localStorage Data Persistence
  * 
  * Provides typed CRUD operations for all application data.
- * Uses 'applywise_' prefix to avoid key collisions.
+ * Uses 'postulis_' prefix to avoid key collisions.
  * 
  * This is a temporary bridge until Supabase DB tables are configured.
  * Each function can be swapped for a Supabase call later.
  */
 
-let PREFIX = 'applywise_'
+let PREFIX = 'postulis_'
 
 export function setStorageUserId(userId: string | null) {
-  PREFIX = userId ? `applywise_${userId}_` : 'applywise_'
+  PREFIX = userId ? `postulis_${userId}_` : 'postulis_'
 }
 
 // ─── Helpers ────────────────────────────────────────────────

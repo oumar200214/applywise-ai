@@ -4,7 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "ApplyWise AI - AI-Powered Job Application Assistant",
+  title: "Postulis — AI-Powered Job Application Assistant",
   description: "Turn any job post into a complete application. Upload your CV, paste a job offer, and get a tailored CV, cover letter, interview questions, and skill gap analysis in minutes.",
 };
 

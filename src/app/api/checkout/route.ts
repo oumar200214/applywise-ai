@@ -4,7 +4,7 @@ import { dodo, PLANS, PlanKey } from '@/lib/dodo'
 
 export async function POST(req: NextRequest) {
   try {
-    // ── 1. Authentification via Supabase ────────────────────────────────────
+    // ── 1. Authentification ─────────────────────────────────────────────────
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -22,12 +22,12 @@ export async function POST(req: NextRequest) {
 
     const plan = PLANS[planKey]
 
-    // ── 3. Détection du pays via IP (header Vercel/Next.js) ─────────────────
-    // Permet l'auto-détection sans forcer un pays par défaut
-    const countryHeader =
+    // ── 3. Détection du pays via IP ─────────────────────────────────────────
+    const countryCode = (
       req.headers.get('x-vercel-ip-country') ||
       req.headers.get('cf-ipcountry') ||
-      'FR' // Fallback Europe si pas de header géo
+      'FR'
+    ).toUpperCase().slice(0, 2)
 
     // ── 4. Récupération du profil utilisateur ───────────────────────────────
     const { data: profile } = await supabase
@@ -39,23 +39,17 @@ export async function POST(req: NextRequest) {
     const customerName = profile?.full_name || user.email?.split('@')[0] || ''
     const customerEmail = profile?.email || user.email || ''
 
-    // ── 5. Création de l'abonnement Dodo ────────────────────────────────────
-    const subscription = await dodo.subscriptions.create({
-      billing: {
-        city: '',
-        country: countryHeader as 'FR',   // cast nécessaire pour le type Dodo
-        state: '',
-        street: '',
-        zipcode: '',
-      },
+    // ── 5. Création de la session de paiement Dodo (nouvelle API) ───────────
+    const session = await dodo.checkoutSessions.create({
+      product_cart: [{ product_id: plan.productId, quantity: 1 }],
       customer: {
         email: customerEmail,
         name: customerName,
       },
-      product_id: plan.productId,
-      quantity: 1,
-      payment_link: true,     // génère une URL de paiement hosted
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?payment=success&plan=${planKey}`,
+      billing_address: {
+        country: countryCode as 'FR',
+      },
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?plan=${planKey}`,
       metadata: {
         userId: user.id,
         planKey,
@@ -63,13 +57,15 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({
-      payment_link: subscription.payment_link,
-      subscription_id: subscription.subscription_id,
+      payment_link: session.checkout_url,
+      session_id: session.session_id,
     })
   } catch (error) {
     console.error('[CHECKOUT_ERROR]', error)
+    const msg = error instanceof Error ? error.message : String(error)
+    const detail = (error as Record<string, unknown>)?.error ?? (error as Record<string, unknown>)?.body ?? ''
     return NextResponse.json(
-      { error: 'Erreur lors de la création du paiement' },
+      { error: `Dodo error: ${msg}`, detail },
       { status: 500 }
     )
   }

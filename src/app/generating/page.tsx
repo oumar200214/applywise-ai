@@ -2,7 +2,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { getApplication, updateApplication, saveGenerationResult, deductCredit, getUserProfile } from '@/lib/storage'
+import { getUserProfile } from '@/lib/storage'
+import { dbGetApplication, dbUpdateApplication, dbSaveGenerationResult, dbDeductCredit, dbAddTrackerEntry } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const timelineSteps = [
@@ -13,49 +14,17 @@ const timelineSteps = [
   { title: 'Finalisation', desc: 'Mise en forme de votre dossier complet.' },
 ]
 
-// ─── Error Display Config ───────────────────────────────────
 const errorConfig: Record<string, { icon: string; title: string; action: string; actionHref?: string }> = {
-  CREDITS_EXHAUSTED: {
-    icon: 'account_balance_wallet',
-    title: 'API Credits Exhausted',
-    action: 'Add credits on console.anthropic.com',
-    actionHref: 'https://console.anthropic.com/',
-  },
-  AUTH_ERROR: {
-    icon: 'key_off',
-    title: 'API Key Invalid',
-    action: 'Check your ANTHROPIC_API_KEY in .env.local',
-  },
-  RATE_LIMITED: {
-    icon: 'speed',
-    title: 'Rate Limit Reached',
-    action: 'Wait a moment and try again',
-  },
-  MODEL_ERROR: {
-    icon: 'model_training',
-    title: 'AI Model Unavailable',
-    action: 'The model may be temporarily unavailable',
-  },
-  OVERLOADED: {
-    icon: 'cloud_off',
-    title: 'AI Service Overloaded',
-    action: 'Try again in a few minutes',
-  },
-  CONFIG_ERROR: {
-    icon: 'settings_alert',
-    title: 'Configuration Missing',
-    action: 'Set up your API key in .env.local',
-  },
-  PARSE_ERROR: {
-    icon: 'code_off',
-    title: 'Response Parse Error',
-    action: 'Try generating again',
-  },
-  UNKNOWN_ERROR: {
-    icon: 'error',
-    title: 'Something Went Wrong',
-    action: 'Please try again',
-  },
+  CREDITS_EXHAUSTED: { icon: 'account_balance_wallet', title: 'Crédits API épuisés', action: 'Ajoutez des crédits sur console.anthropic.com', actionHref: 'https://console.anthropic.com/' },
+  AUTH_ERROR: { icon: 'key_off', title: 'Clé API invalide', action: 'Vérifiez votre ANTHROPIC_API_KEY dans .env.local' },
+  UNAUTHORIZED: { icon: 'lock', title: 'Session expirée', action: 'Veuillez vous reconnecter', actionHref: '/auth' },
+  RATE_LIMITED: { icon: 'speed', title: 'Limite de débit atteinte', action: 'Patientez un moment et réessayez' },
+  MODEL_ERROR: { icon: 'model_training', title: 'Modèle IA indisponible', action: 'Le modèle est peut-être temporairement indisponible' },
+  OVERLOADED: { icon: 'cloud_off', title: 'Service IA surchargé', action: 'Réessayez dans quelques minutes' },
+  CONFIG_ERROR: { icon: 'settings_alert', title: 'Configuration manquante', action: 'Configurez votre clé API dans .env.local' },
+  PARSE_ERROR: { icon: 'code_off', title: 'Erreur de traitement', action: 'Réessayez la génération' },
+  INPUT_TOO_LARGE: { icon: 'text_fields', title: 'Texte trop volumineux', action: 'Raccourcissez la description du poste ou le CV (max 20 000 caractères chacun)' },
+  UNKNOWN_ERROR: { icon: 'error', title: 'Une erreur est survenue', action: 'Veuillez réessayer' },
 }
 
 function GeneratingContent() {
@@ -65,30 +34,33 @@ function GeneratingContent() {
   const [progress, setProgress] = useState(0)
   const [activeStep, setActiveStep] = useState(0)
   const [status, setStatus] = useState<'loading'|'calling'|'done'|'error'>('loading')
-  const [appTitle, setAppTitle] = useState('Your Application')
+  const [appTitle, setAppTitle] = useState('Votre candidature')
   const [appCompany, setAppCompany] = useState('')
   const [errorInfo, setErrorInfo] = useState<{ message: string; code: string } | null>(null)
   const calledRef = useRef(false)
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null)
   const stepTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const startGeneration = () => {
-    const app = getApplication(appId)
-    if (!app) { toast.error('Application not found'); router.push('/new-application'); return }
+  const clearTimers = () => {
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current)
+    if (stepTimerRef.current) clearInterval(stepTimerRef.current)
+  }
+
+  const startGeneration = async () => {
+    const app = await dbGetApplication(appId)
+    if (!app) { toast.error('Candidature introuvable'); router.push('/new-application'); return }
     setAppTitle(app.jobTitle)
     setAppCompany(app.companyName)
 
-    // Reset state for retry
     setStatus('calling')
     setErrorInfo(null)
     setProgress(0)
     setActiveStep(0)
 
-    // Start progress animation
     let prog = 0
     progressTimerRef.current = setInterval(() => {
       prog += 0.5
-      if (prog > 90) { prog = 90 }
+      if (prog > 90) prog = 90
       setProgress(Math.min(prog, 100))
     }, 100)
 
@@ -98,7 +70,6 @@ function GeneratingContent() {
 
     const profile = getUserProfile()
 
-    // Call the real AI API
     fetch('/api/generate-application', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -116,14 +87,19 @@ function GeneratingContent() {
       .then(async res => {
         const data = await res.json()
         if (!res.ok || !data.success) {
-          const error = new Error(data.error || 'Generation failed')
+          const error = new Error(data.error || 'Génération échouée')
           ;(error as Error & { code?: string }).code = data.code || 'UNKNOWN_ERROR'
           throw error
         }
 
-        // Save result
-        saveGenerationResult({ applicationId: appId, data: data.data, tokensUsed: data.tokens_used, generatedAt: new Date().toISOString() })
-        updateApplication(appId, {
+        await dbSaveGenerationResult({
+          applicationId: appId,
+          data: data.data,
+          tokensUsed: data.tokens_used,
+          generatedAt: new Date().toISOString(),
+        })
+
+        await dbUpdateApplication(appId, {
           status: 'generated',
           matchScore: data.data.match_score,
           strongFitAreas: data.data.strong_fit_areas,
@@ -132,7 +108,21 @@ function GeneratingContent() {
           aiSummary: data.data.ai_summary,
           recommendedAction: data.data.recommended_action,
         })
-        deductCredit()
+
+        await dbDeductCredit()
+
+        try {
+          await dbAddTrackerEntry({
+            applicationId: appId,
+            jobTitle: app.jobTitle,
+            companyName: app.companyName || '',
+            matchScore: data.data.match_score,
+            status: 'ready',
+            docsReady: true,
+          })
+        } catch {
+          // Non-bloquant si le tracker échoue
+        }
 
         setStatus('done')
         setProgress(100)
@@ -142,25 +132,20 @@ function GeneratingContent() {
         if (data.warning) {
           toast(data.warning, { icon: '⚠️', duration: 5000 })
         } else {
-          toast.success('Application pack generated!')
+          toast.success('Dossier de candidature généré !')
         }
         setTimeout(() => router.push(`/applications/${appId}`), 1200)
       })
       .catch(err => {
-        console.error('Generation error:', err)
+        console.error('Erreur de génération :', err)
         setStatus('error')
         setErrorInfo({
-          message: err.message || 'AI generation failed. Please try again.',
+          message: err.message || 'Génération IA échouée. Veuillez réessayer.',
           code: (err as Error & { code?: string }).code || 'UNKNOWN_ERROR',
         })
-        updateApplication(appId, { status: 'error' })
+        dbUpdateApplication(appId, { status: 'error' })
         clearTimers()
       })
-  }
-
-  const clearTimers = () => {
-    if (progressTimerRef.current) clearInterval(progressTimerRef.current)
-    if (stepTimerRef.current) clearInterval(stepTimerRef.current)
   }
 
   useEffect(() => {
@@ -184,10 +169,10 @@ function GeneratingContent() {
       <header className="fixed top-0 left-0 w-full flex justify-between items-center px-6 py-4 bg-white/80 backdrop-blur-md z-50 border-b border-outline-variant">
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-          <span className="text-xl font-bold text-primary tracking-tight">ApplyWise AI</span>
+          <span className="text-xl font-bold text-primary tracking-tight">Postulis</span>
         </div>
         <span className="text-sm font-semibold text-on-surface-variant">
-          {status === 'error' ? 'Error occurred' : status === 'done' ? 'Complete!' : 'Generating...'}
+          {status === 'error' ? 'Erreur survenue' : status === 'done' ? 'Terminé !' : 'Génération en cours...'}
         </span>
       </header>
 
@@ -212,57 +197,39 @@ function GeneratingContent() {
             </div>
           </div>
 
-          {/* ── Error State ── */}
           {status === 'error' && errCfg && (
             <div className="space-y-5 max-w-md">
               <div className="space-y-2">
                 <h2 className="text-[28px] font-semibold text-error tracking-tight">{errCfg.title}</h2>
                 <p className="text-base text-on-surface-variant">{errorInfo?.message}</p>
               </div>
-
               <div className="bg-error-container/20 border border-error/20 rounded-xl p-4 text-sm text-on-surface-variant flex items-start gap-3">
                 <span className="material-symbols-outlined text-error shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>{errCfg.icon}</span>
                 <p><strong className="text-error">{errCfg.action}</strong></p>
               </div>
-
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                 {errCfg.actionHref && (
-                  <a
-                    href={errCfg.actionHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/10"
-                  >
-                    <span className="material-symbols-outlined text-lg">open_in_new</span>
-                    Fix Issue
+                  <a href={errCfg.actionHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/10">
+                    <span className="material-symbols-outlined text-lg">open_in_new</span>Corriger le problème
                   </a>
                 )}
-                <button
-                  onClick={handleRetry}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-container text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/10"
-                >
-                  <span className="material-symbols-outlined text-lg">refresh</span>
-                  Retry Generation
+                <button onClick={handleRetry} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-container text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/10">
+                  <span className="material-symbols-outlined text-lg">refresh</span>Réessayer
                 </button>
-                <button
-                  onClick={() => router.push('/new-application')}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-outline-variant bg-white text-on-surface rounded-xl text-sm font-semibold hover:bg-surface-container transition-all"
-                >
-                  <span className="material-symbols-outlined text-lg">arrow_back</span>
-                  Go Back
+                <button onClick={() => router.push('/new-application')} className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-outline-variant bg-white text-on-surface rounded-xl text-sm font-semibold hover:bg-surface-container transition-all">
+                  <span className="material-symbols-outlined text-lg">arrow_back</span>Retour
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── Normal State ── */}
           {status !== 'error' && (
             <div className="space-y-3">
               <h2 className="text-[28px] font-semibold text-primary tracking-tight">
                 {timelineSteps[activeStep]?.title || 'Génération en cours...'}
               </h2>
               <p className="text-lg text-on-surface-variant max-w-md">
-                {appTitle}{appCompany ? ` at ${appCompany}` : ''} — {timelineSteps[activeStep]?.desc}
+                {appTitle}{appCompany ? ` chez ${appCompany}` : ''} — {timelineSteps[activeStep]?.desc}
               </p>
             </div>
           )}
@@ -271,8 +238,8 @@ function GeneratingContent() {
         <aside className="w-full lg:w-96 flex flex-col gap-6">
           <div className="glass-card rounded-xl p-8 border border-outline-variant shadow-sm space-y-6">
             <div className="flex items-center justify-between border-b border-outline-variant pb-4">
-              <h3 className="text-xl font-bold text-on-surface">Process Timeline</h3>
-              <span className="text-secondary text-sm font-semibold flex items-center gap-1"><span className="material-symbols-outlined text-sm">speed</span>High Priority</span>
+              <h3 className="text-xl font-bold text-on-surface">Chronologie du processus</h3>
+              <span className="text-secondary text-sm font-semibold flex items-center gap-1"><span className="material-symbols-outlined text-sm">speed</span>Haute priorité</span>
             </div>
             <div className="space-y-6">
               {timelineSteps.map((s, idx) => {
@@ -297,7 +264,7 @@ function GeneratingContent() {
           </div>
           <div className="bg-tertiary-container/30 border border-tertiary-fixed rounded-xl p-6 flex items-start gap-4">
             <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm shrink-0"><span className="material-symbols-outlined text-on-tertiary-fixed-variant" style={{ fontVariationSettings: "'FILL' 1" }}>auto_fix_high</span></div>
-            <div><p className="text-sm font-semibold text-on-tertiary-fixed-variant">AI Logic Active</p><p className="text-xs text-on-tertiary-fixed-variant/80">Using Claude AI for complex reasoning and semantic alignment.</p></div>
+            <div><p className="text-sm font-semibold text-on-tertiary-fixed-variant">IA Active</p><p className="text-xs text-on-tertiary-fixed-variant/80">Utilisation de Claude AI pour le raisonnement complexe et l&apos;alignement sémantique.</p></div>
           </div>
         </aside>
       </main>

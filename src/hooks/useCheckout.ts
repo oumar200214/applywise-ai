@@ -23,11 +23,13 @@ export function useCheckout() {
       if (!res.ok) {
         if (res.status === 401) {
           toast.dismiss(loadingToast)
-          // Redirect to login if unauthenticated
           router.push('/auth?redirect=/pricing')
           return
         }
-        throw new Error(data.error || 'Une erreur est survenue')
+        const errMsg = data.error || 'Une erreur est survenue'
+        const detail = data.detail ? `\n${JSON.stringify(data.detail)}` : ''
+        console.error('[CHECKOUT]', errMsg, detail)
+        throw new Error(errMsg + detail)
       }
 
       if (data.payment_link) {
