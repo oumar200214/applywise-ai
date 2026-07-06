@@ -35,10 +35,11 @@ import {
 
 async function getCurrentUser() {
   const supabase = createClient()
-  // getSession() reads from local cache — no network call, no navigator lock contention
-  // JWT is validated server-side by Supabase RLS on every query, so this is safe
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.user ?? null
+  // getSession() normally reads from local cache but can trigger a network refresh
+  // if the JWT is expired. We race it against a 2s timeout so it never blocks the UI.
+  const userPromise = supabase.auth.getSession()
+    .then(({ data: { session } }) => session?.user ?? null)
+  return withFallback(userPromise, null, 2000)
 }
 
 // Race a Supabase query against a timeout. Returns fallback if Supabase is paused or slow.
