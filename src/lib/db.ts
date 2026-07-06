@@ -41,6 +41,14 @@ async function getCurrentUser() {
   return session?.user ?? null
 }
 
+// Race a Supabase query against a timeout. Returns fallback if Supabase is paused or slow.
+async function withFallback<T>(queryPromise: PromiseLike<T>, fallback: T, ms = 5000): Promise<T> {
+  return Promise.race([
+    Promise.resolve(queryPromise),
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ])
+}
+
 // ─── APPLICATIONS ─────────────────────────────────────────────────────────────
 
 export async function dbGetApplications(): Promise<StoredApplication[]> {
@@ -82,53 +90,58 @@ export async function dbGetApplications(): Promise<StoredApplication[]> {
 }
 
 export async function dbGetApplication(id: string): Promise<StoredApplication | null> {
+  const local = lsGetApplication(id)
   const user = await getCurrentUser()
-  if (!user) return lsGetApplication(id)
+  if (!user) return local
 
   const supabase = createClient()
-  const { data, error } = await supabase
+  const queryPromise = supabase
     .from('applications')
     .select('*')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
+    .then(({ data, error }) => {
+      if (error || !data) return local
+      return {
+        id: data.id,
+        userId: data.user_id,
+        jobTitle: data.job_title,
+        companyName: data.company_name ?? '',
+        jobDescription: data.job_description,
+        jobUrl: data.job_url ?? '',
+        country: data.country ?? '',
+        jobType: data.job_type ?? '',
+        cvText: data.cv_text,
+        selectedOutputs: data.selected_outputs ?? [],
+        tone: data.tone ?? 'Professional',
+        outputLanguage: data.output_language ?? 'English',
+        status: data.status,
+        matchScore: data.match_score ?? undefined,
+        strongFitAreas: data.strong_fit_areas ?? undefined,
+        missingSkills: data.missing_skills ?? undefined,
+        atsKeywords: data.ats_keywords ?? undefined,
+        aiSummary: data.ai_summary ?? undefined,
+        recommendedAction: data.recommended_action ?? undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      } as StoredApplication
+    })
 
-  if (error || !data) return lsGetApplication(id)
-
-  return {
-    id: data.id,
-    userId: data.user_id,
-    jobTitle: data.job_title,
-    companyName: data.company_name ?? '',
-    jobDescription: data.job_description,
-    jobUrl: data.job_url ?? '',
-    country: data.country ?? '',
-    jobType: data.job_type ?? '',
-    cvText: data.cv_text,
-    selectedOutputs: data.selected_outputs ?? [],
-    tone: data.tone ?? 'Professional',
-    outputLanguage: data.output_language ?? 'English',
-    status: data.status,
-    matchScore: data.match_score ?? undefined,
-    strongFitAreas: data.strong_fit_areas ?? undefined,
-    missingSkills: data.missing_skills ?? undefined,
-    atsKeywords: data.ats_keywords ?? undefined,
-    aiSummary: data.ai_summary ?? undefined,
-    recommendedAction: data.recommended_action ?? undefined,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  }
+  return withFallback(queryPromise, local)
 }
 
 export async function dbSaveApplication(app: StoredApplication): Promise<void> {
-  // Always persist locally for instant reads during generation
+  // Always persist locally first — localStorage is source of truth for real-time UI
   lsSaveApplication(app)
 
   const user = await getCurrentUser()
   if (!user) return
 
   const supabase = createClient()
-  await supabase.from('applications').upsert({
+  // Fire-and-forget: never block navigation waiting for a Supabase write.
+  // If the project is paused or the network is slow, the app still works from localStorage.
+  void supabase.from('applications').upsert({
     id: app.id,
     user_id: user.id,
     job_title: app.jobTitle,
@@ -505,44 +518,49 @@ export async function dbGetCreditTransactions() {
 // ─── DASHBOARD STATS (agrégées depuis Supabase) ───────────────────────────────
 
 export async function dbGetDashboardStats() {
+  const local = lsGetDashboardStats()
   const user = await getCurrentUser()
-  if (!user) return lsGetDashboardStats()
+  if (!user) return local
 
   const supabase = createClient()
 
-  const [appsRes, trackerRes, profileRes] = await Promise.all([
-    supabase.from('applications').select('id, match_score, status, created_at').eq('user_id', user.id),
-    supabase.from('tracker_entries').select('status').eq('user_id', user.id),
-    supabase.from('users_profile').select('plan, plan_expires_at, credits_remaining').eq('user_id', user.id).single(),
-  ])
+  const statsPromise = (async () => {
+    const [appsRes, trackerRes, profileRes] = await Promise.all([
+      supabase.from('applications').select('id, match_score, status, created_at').eq('user_id', user.id),
+      supabase.from('tracker_entries').select('status').eq('user_id', user.id),
+      supabase.from('users_profile').select('plan, plan_expires_at, credits_remaining').eq('user_id', user.id).single(),
+    ])
 
-  const apps = appsRes.data ?? []
-  const tracker = trackerRes.data ?? []
-  const profile = profileRes.data
+    const apps = appsRes.data ?? []
+    const tracker = trackerRes.data ?? []
+    const profile = profileRes.data
 
-  const isPaid = profile && (profile.plan === 'pro' || profile.plan === 'premium') &&
-    (!profile.plan_expires_at || new Date(profile.plan_expires_at) > new Date())
+    const isPaid = profile && (profile.plan === 'pro' || profile.plan === 'premium') &&
+      (!profile.plan_expires_at || new Date(profile.plan_expires_at) > new Date())
 
-  const credits = isPaid ? Infinity : (profile?.credits_remaining ?? 0)
+    const credits = isPaid ? Infinity : (profile?.credits_remaining ?? 0)
 
-  const generated = apps.filter(a => a.status === 'generated')
-  const scores = generated.map(a => a.match_score ?? 0).filter(s => s > 0)
-  const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
+    const generated = apps.filter(a => a.status === 'generated')
+    const scores = generated.map(a => a.match_score ?? 0).filter(s => s > 0)
+    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
 
-  const interviewCount = tracker.filter(t => ['interview', 'offer'].includes(t.status)).length
-  const appliedCount = tracker.filter(t => !['draft', 'ready'].includes(t.status)).length
-  const interviewRate = appliedCount > 0 ? Math.round((interviewCount / appliedCount) * 100) : 0
+    const interviewCount = tracker.filter(t => ['interview', 'offer'].includes(t.status)).length
+    const appliedCount = tracker.filter(t => !['draft', 'ready'].includes(t.status)).length
+    const interviewRate = appliedCount > 0 ? Math.round((interviewCount / appliedCount) * 100) : 0
 
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const weeklyGrowth = apps.filter(a => a.created_at > oneWeekAgo).length
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const weeklyGrowth = apps.filter(a => a.created_at > oneWeekAgo).length
 
-  return {
-    totalApplications: apps.length,
-    creditsRemaining: credits,
-    avgMatchScore: avgScore,
-    interviewRate,
-    weeklyGrowth,
-  }
+    return {
+      totalApplications: apps.length,
+      creditsRemaining: credits,
+      avgMatchScore: avgScore,
+      interviewRate,
+      weeklyGrowth,
+    }
+  })()
+
+  return withFallback(statsPromise, local)
 }
 
 // ─── EXPORT ET SUPPRESSION DE COMPTE ──────────────────────────────────────────
