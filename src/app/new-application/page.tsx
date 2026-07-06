@@ -95,19 +95,13 @@ export default function NewApplicationPage() {
     if (!canGenerate()) { toast.error('Vous avez utilisé vos 3 générations gratuites. Passez à Pro pour un accès illimité !'); router.push('/pricing'); return }
 
     setLoading(true)
-    try {
-      const appId = generateId()
-      await dbSaveApplication({
-        id: appId, userId: '', jobTitle, companyName, jobDescription, jobUrl, country, jobType,
-        cvText, selectedOutputs, tone, outputLanguage, status: 'generating',
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      })
-      router.push(`/generating?id=${appId}`)
-    } catch (err) {
-      console.error('[GENERATE]', err)
-      toast.error('Erreur lors de la sauvegarde. Veuillez réessayer.')
-      setLoading(false)
-    }
+    const appId = generateId()
+    dbSaveApplication({
+      id: appId, userId: '', jobTitle, companyName, jobDescription, jobUrl, country, jobType,
+      cvText, selectedOutputs, tone, outputLanguage, status: 'generating',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    })
+    router.push(`/generating?id=${appId}`)
   }
 
   const stepsData = [

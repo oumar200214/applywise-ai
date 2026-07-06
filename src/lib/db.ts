@@ -128,40 +128,43 @@ export async function dbGetApplication(id: string): Promise<StoredApplication | 
       } as StoredApplication
     })
 
-  return withFallback(queryPromise, local)
+  return withFallback(queryPromise, local, 3000)
 }
 
-export async function dbSaveApplication(app: StoredApplication): Promise<void> {
-  // Always persist locally first — localStorage is source of truth for real-time UI
+export function dbSaveApplication(app: StoredApplication): void {
+  // Write to localStorage synchronously — this is the source of truth for navigation.
+  // Returns immediately so the caller (handleGenerate) is never blocked.
   lsSaveApplication(app)
 
-  const user = await getCurrentUser()
-  if (!user) return
-
-  const supabase = createClient()
-  // Fire-and-forget: never block navigation waiting for a Supabase write.
-  // If the project is paused or the network is slow, the app still works from localStorage.
-  void supabase.from('applications').upsert({
-    id: app.id,
-    user_id: user.id,
-    job_title: app.jobTitle,
-    company_name: app.companyName,
-    job_description: app.jobDescription,
-    job_url: app.jobUrl,
-    country: app.country,
-    job_type: app.jobType,
-    cv_text: app.cvText,
-    selected_outputs: app.selectedOutputs,
-    tone: app.tone,
-    output_language: app.outputLanguage,
-    status: app.status,
-    match_score: app.matchScore,
-    strong_fit_areas: app.strongFitAreas,
-    missing_skills: app.missingSkills,
-    ats_keywords: app.atsKeywords,
-    ai_summary: app.aiSummary,
-    recommended_action: app.recommendedAction,
-  }, { onConflict: 'id' })
+  // Background-only Supabase sync — never awaited, never blocks the UI.
+  ;(async () => {
+    try {
+      const user = await getCurrentUser()
+      if (!user) return
+      const supabase = createClient()
+      await supabase.from('applications').upsert({
+        id: app.id,
+        user_id: user.id,
+        job_title: app.jobTitle,
+        company_name: app.companyName,
+        job_description: app.jobDescription,
+        job_url: app.jobUrl,
+        country: app.country,
+        job_type: app.jobType,
+        cv_text: app.cvText,
+        selected_outputs: app.selectedOutputs,
+        tone: app.tone,
+        output_language: app.outputLanguage,
+        status: app.status,
+        match_score: app.matchScore,
+        strong_fit_areas: app.strongFitAreas,
+        missing_skills: app.missingSkills,
+        ats_keywords: app.atsKeywords,
+        ai_summary: app.aiSummary,
+        recommended_action: app.recommendedAction,
+      }, { onConflict: 'id' })
+    } catch { /* ignore — localStorage already has the data */ }
+  })()
 }
 
 export async function dbUpdateApplication(id: string, updates: Partial<StoredApplication>): Promise<void> {
