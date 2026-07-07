@@ -109,49 +109,68 @@ function extractJSON(text: string): Record<string, unknown> {
   return JSON.parse(text)
 }
 
+// ─── SSE helper ─────────────────────────────────────────────
+function sseEvent(data: object): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)
+}
+function ssePing(): Uint8Array {
+  return new TextEncoder().encode(': ping\n\n')
+}
+
 // ─── POST Handler ───────────────────────────────────────────
+// Uses SSE streaming so Vercel Hobby's 30s wall-clock timeout
+// only applies to TTFB. We send a ping in <1s, then Anthropic
+// can take 60-90s without a 504.
 export async function POST(request: NextRequest) {
-  try {
-    // ── Auth ──────────────────────────────────────────────────
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required.', code: 'UNAUTHORIZED' },
-        { status: 401 }
-      )
-    }
+  // ── Fast pre-flight checks (return plain JSON on failure) ───
+  const supabase = await createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Authentication required.', code: 'UNAUTHORIZED' },
+      { status: 401 }
+    )
+  }
 
-    // Validate API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in your .env.local file.', code: 'CONFIG_ERROR' },
-        { status: 500 }
-      )
-    }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'Anthropic API key is not configured.', code: 'CONFIG_ERROR' },
+      { status: 500 }
+    )
+  }
 
-    const body = await request.json()
-    const { jobTitle, companyName, jobDescription, cvText, tone, outputLanguage } = body
+  const body = await request.json()
+  const { jobTitle, companyName, jobDescription, cvText, tone, outputLanguage } = body
 
-    if (!jobTitle || !jobDescription || !cvText) {
-      return NextResponse.json(
-        { error: 'Missing required fields: job title, job description, and CV text are required.', code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      )
-    }
+  if (!jobTitle || !jobDescription || !cvText) {
+    return NextResponse.json(
+      { error: 'Missing required fields: job title, job description, and CV text are required.', code: 'VALIDATION_ERROR' },
+      { status: 400 }
+    )
+  }
 
-    // Input size caps to prevent token abuse
-    if (jobDescription.length > 20000 || cvText.length > 20000) {
-      return NextResponse.json(
-        { error: 'Input too large. Job description and CV must be under 20,000 characters each.', code: 'INPUT_TOO_LARGE' },
-        { status: 400 }
-      )
-    }
+  if (jobDescription.length > 20000 || cvText.length > 20000) {
+    return NextResponse.json(
+      { error: 'Input too large. Job description and CV must be under 20,000 characters each.', code: 'INPUT_TOO_LARGE' },
+      { status: 400 }
+    )
+  }
 
-    // ── Server-side plan lookup (never trust client) ───────────
-    const plan = await getUserPlan(user.id)
+  // ── Stream the long Anthropic call ─────────────────────────
+  const stream = new ReadableStream({
+    async start(controller) {
+      // Ping immediately — this satisfies Vercel's TTFB timeout.
+      // After the first byte, streaming runs without wall-clock limit.
+      controller.enqueue(ssePing())
+      const interval = setInterval(() => {
+        try { controller.enqueue(ssePing()) } catch { /* stream closed */ }
+      }, 8000)
 
-    // ── Build Prompt ──────────────────────────────────────────
+      try {
+        // ── Server-side plan lookup (never trust client) ───────
+        const plan = await getUserPlan(user.id)
+
+        // ── Build Prompt ─────────────────────────────────────
     const prompt = `You are an elite Career Strategist, ATS Optimization Expert, and Executive Recruiter with 20+ years of experience placing candidates at FAANG, McKinsey, Goldman Sachs, and top-tier firms worldwide. Your goal: produce the OPTIMAL, COMPLETE application package that gives the candidate the maximum competitive edge.
 
 ## CONTEXT
@@ -322,57 +341,62 @@ ACCOUNT TIER: PRO/PREMIUM — Generate a COMPLETE, EXHAUSTIVE, TOP-QUALITY respo
 `}
 `
 
-    // ── Call Anthropic API ─────────────────────────────────────
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
-      max_tokens: 16384,
-      messages: [{ role: 'user', content: prompt }],
-    })
+        // ── Call Anthropic API ───────────────────────────────
+        const message = await anthropic.messages.create({
+          model: 'claude-sonnet-5',
+          max_tokens: 16384,
+          messages: [{ role: 'user', content: prompt }],
+        })
 
-    // ── Extract text content ──────────────────────────────────
-    const textContent = message.content.find(c => c.type === 'text')
-    if (!textContent || textContent.type !== 'text') {
-      return NextResponse.json(
-        { error: 'No text response from AI. Please try again.', code: 'EMPTY_RESPONSE' },
-        { status: 500 }
-      )
-    }
+        // ── Extract text content ─────────────────────────────
+        const textContent = message.content.find(c => c.type === 'text')
+        if (!textContent || textContent.type !== 'text') {
+          controller.enqueue(sseEvent({ success: false, error: 'No text response from AI.', code: 'EMPTY_RESPONSE' }))
+          return
+        }
 
-    // ── Parse JSON from response ──────────────────────────────
-    let result: Record<string, unknown>
-    try {
-      result = extractJSON(textContent.text)
-    } catch {
-      console.error('JSON Parse Error. Raw AI response (first 500 chars):', textContent.text.substring(0, 500))
-      return NextResponse.json(
-        { error: 'Failed to parse AI response. The AI returned malformed data. Please try again.', code: 'PARSE_ERROR' },
-        { status: 500 }
-      )
-    }
+        // ── Parse JSON from response ─────────────────────────
+        let result: Record<string, unknown>
+        try {
+          result = extractJSON(textContent.text)
+        } catch {
+          console.error('JSON Parse Error. Raw AI response (first 500 chars):', textContent.text.substring(0, 500))
+          controller.enqueue(sseEvent({ success: false, error: 'Failed to parse AI response.', code: 'PARSE_ERROR' }))
+          return
+        }
 
-    // ── Check for truncated response (stop_reason) ────────────
-    if (message.stop_reason === 'max_tokens') {
-      console.warn('AI response was truncated due to max_tokens limit.')
-      // Still return partial data with a warning
-      return NextResponse.json({
-        success: true,
-        data: result,
-        tokens_used: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
-        warning: 'Response was partially truncated. Some sections may be incomplete.',
-      })
-    }
+        // ── Send result via SSE ──────────────────────────────
+        const tokensUsed = (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0)
+        const warning = message.stop_reason === 'max_tokens'
+          ? 'Response was partially truncated. Some sections may be incomplete.'
+          : undefined
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-      tokens_used: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
-    })
-  } catch (error: unknown) {
-    console.error('AI Generation Error:', error)
-    const categorized = categorizeError(error)
-    return NextResponse.json(
-      { error: categorized.message, code: categorized.code },
-      { status: categorized.status }
-    )
-  }
+        controller.enqueue(sseEvent({
+          success: true,
+          data: result,
+          tokens_used: tokensUsed,
+          ...(warning ? { warning } : {}),
+        }))
+      } catch (error: unknown) {
+        console.error('AI Generation Error:', error)
+        const categorized = categorizeError(error)
+        controller.enqueue(sseEvent({
+          success: false,
+          error: categorized.message,
+          code: categorized.code,
+        }))
+      } finally {
+        clearInterval(interval)
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

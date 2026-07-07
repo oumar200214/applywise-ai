@@ -85,28 +85,56 @@ function GeneratingContent() {
       }),
     })
       .then(async res => {
-        const data = await res.json()
-        if (!res.ok || !data.success) {
-          const error = new Error(data.error || 'Génération échouée')
-          ;(error as Error & { code?: string }).code = data.code || 'UNKNOWN_ERROR'
+        // Auth/validation errors return plain JSON; success returns SSE stream
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: `HTTP ${res.status}`, code: 'UNKNOWN_ERROR' }))
+          const err = new Error(data.error || 'Generation failed')
+          ;(err as Error & { code?: string }).code = data.code || 'UNKNOWN_ERROR'
+          throw err
+        }
+        // Read SSE stream — wait for the `data:` line with the result
+        const reader = res.body!.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let data: Record<string, unknown> | null = null
+        outer: while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            try { data = JSON.parse(line.slice(6)); break outer } catch { /* partial, keep reading */ }
+          }
+        }
+        if (!data) throw Object.assign(new Error('Stream ended without result'), { code: 'UNKNOWN_ERROR' })
+        if (!data.success) {
+          const errMsg = typeof data.error === 'string' ? data.error : 'Génération échouée'
+          const errCode = typeof data.code === 'string' ? data.code : 'UNKNOWN_ERROR'
+          const error = new Error(errMsg)
+          ;(error as Error & { code?: string }).code = errCode
           throw error
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = data.data as any
+
         await dbSaveGenerationResult({
           applicationId: appId,
-          data: data.data,
-          tokensUsed: data.tokens_used,
+          data: result,
+          tokensUsed: typeof data.tokens_used === 'number' ? data.tokens_used : 0,
           generatedAt: new Date().toISOString(),
         })
 
         await dbUpdateApplication(appId, {
           status: 'generated',
-          matchScore: data.data.match_score,
-          strongFitAreas: data.data.strong_fit_areas,
-          missingSkills: data.data.missing_skills,
-          atsKeywords: data.data.ats_keywords,
-          aiSummary: data.data.ai_summary,
-          recommendedAction: data.data.recommended_action,
+          matchScore: result.match_score,
+          strongFitAreas: result.strong_fit_areas,
+          missingSkills: result.missing_skills,
+          atsKeywords: result.ats_keywords,
+          aiSummary: result.ai_summary,
+          recommendedAction: result.recommended_action,
         })
 
         await dbDeductCredit()
@@ -116,7 +144,7 @@ function GeneratingContent() {
             applicationId: appId,
             jobTitle: app.jobTitle,
             companyName: app.companyName || '',
-            matchScore: data.data.match_score,
+            matchScore: result.match_score,
             status: 'ready',
             docsReady: true,
           })
@@ -130,7 +158,7 @@ function GeneratingContent() {
         clearTimers()
 
         if (data.warning) {
-          toast(data.warning, { icon: '⚠️', duration: 5000 })
+          toast(String(data.warning), { icon: '⚠️', duration: 5000 })
         } else {
           toast.success('Dossier de candidature généré !')
         }
