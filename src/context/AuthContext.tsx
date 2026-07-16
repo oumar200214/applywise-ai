@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { setStorageUserId, updateUserProfile, setCredits as lsSetCredits } from '@/lib/storage'
+import { clearUserCache } from '@/lib/db'
 import type { User, AuthError } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -132,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     setPlan('free')
     setStorageUserId(null)
+    clearUserCache() // flush db.ts user cache so next calls don't serve stale session
     // Fire Supabase signOut in background (network call — can be slow)
     supabase.auth.signOut().catch(() => {})
   }, [supabase.auth])

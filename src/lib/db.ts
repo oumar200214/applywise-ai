@@ -7,6 +7,7 @@
  */
 
 import { createClient } from '@/lib/supabase/client'
+import type { User } from '@supabase/supabase-js'
 import type { StoredApplication, StoredResult, TrackerEntry, StoredProfile } from '@/lib/storage'
 import {
   getApplications as lsGetApplications,
@@ -34,13 +35,39 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function getCurrentUser() {
+// User cache — deduplicates concurrent getSession() calls to prevent
+// navigator.locks contention ("lock was released because another request stole it").
+// Multiple db.ts functions called in the same render cycle share one getSession() call.
+let _userCache: { user: User | null; expiresAt: number } | null = null
+let _userPromise: Promise<User | null> | null = null
+
+async function getCurrentUser(): Promise<User | null> {
+  // Return cached value if still fresh (5s TTL)
+  if (_userCache && Date.now() < _userCache.expiresAt) return _userCache.user
+  // Dedup: if a getSession() is already in flight, piggyback on it
+  if (_userPromise) return _userPromise
+
   const supabase = createClient()
-  // getSession() normally reads from local cache but can trigger a network refresh
-  // if the JWT is expired. We race it against a 2s timeout so it never blocks the UI.
-  const userPromise = supabase.auth.getSession()
-    .then(({ data: { session } }) => session?.user ?? null)
-  return withFallback(userPromise, null, 2000)
+  _userPromise = withFallback(
+    supabase.auth.getSession().then(({ data: { session } }) => session?.user ?? null),
+    null,
+    2000
+  ).then(user => {
+    _userCache = { user, expiresAt: Date.now() + 5000 }
+    _userPromise = null
+    return user
+  }).catch(() => {
+    _userPromise = null
+    return null
+  })
+
+  return _userPromise
+}
+
+/** Call on sign-out so db.ts doesn't serve the old user for up to 5 seconds. */
+export function clearUserCache(): void {
+  _userCache = null
+  _userPromise = null
 }
 
 // Race a Supabase query against a timeout. Returns fallback if Supabase is paused or slow.
