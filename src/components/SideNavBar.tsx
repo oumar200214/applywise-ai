@@ -32,14 +32,9 @@ export default function SideNavBar() {
     dbGetCredits().then(c => setCredits(c === Infinity ? '∞' : c))
   }, [plan])
 
-  const handleLogout = async () => {
-    try {
-      await signOut()
-      toast.success('Déconnexion réussie')
-      router.push('/')
-    } catch {
-      toast.error('Erreur lors de la déconnexion')
-    }
+  const handleLogout = () => {
+    signOut() // clears local state immediately; Supabase call fires in background
+    router.push('/')
   }
 
   const pc = planConfig[plan] ?? planConfig.free

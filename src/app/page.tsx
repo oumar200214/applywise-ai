@@ -194,6 +194,7 @@ export default function LandingPage() {
           <div className="flex gap-8 text-xs">
             <Link className="text-slate-500 hover:text-slate-800 transition-colors font-medium" href="/privacy">Politique de confidentialité</Link>
             <Link className="text-slate-500 hover:text-slate-800 transition-colors font-medium" href="/terms">Conditions d&apos;utilisation</Link>
+            <Link className="text-slate-500 hover:text-slate-800 transition-colors font-medium" href="/refund-policy">Remboursement</Link>
             <Link className="text-slate-500 hover:text-slate-800 transition-colors font-medium" href="/pricing">Tarifs</Link>
             <a className="text-slate-500 hover:text-slate-800 transition-colors font-medium" href="mailto:contact@postulis.io">Contact</a>
           </div>

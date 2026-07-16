@@ -62,9 +62,9 @@ export default function TopNavBar() {
   const recentApps = allApps.slice(0, 5)
   const unreadCount = recentApps.filter(a => a.status === 'generated').length
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setShowUser(false)
-    await signOut()
+    signOut() // clears local state immediately; Supabase call fires in background
     router.push('/')
   }
 

@@ -23,6 +23,7 @@ import {
   getUserProfile as lsGetUserProfile,
   updateUserProfile as lsUpdateUserProfile,
   getCredits as lsGetCredits,
+  setCredits as lsSetCredits,
   getCreditTransactions as lsGetCreditTransactions,
   deductCredit as lsDeductCredit,
   hasPaidPlan as lsHasPaidPlan,
@@ -355,7 +356,7 @@ export async function dbGetUserPlan(): Promise<'free' | 'pro' | 'premium'> {
     .from('users_profile')
     .select('plan, plan_expires_at')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   if (error || !data) return 'free'
 
@@ -384,7 +385,7 @@ export async function dbGetUserProfile(): Promise<StoredProfile> {
     .from('users_profile')
     .select('*')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   if (error || !data) return local
 
@@ -442,7 +443,7 @@ export async function dbGetCredits(): Promise<number> {
     .from('users_profile')
     .select('credits_remaining, plan, plan_expires_at')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   if (!data) return lsGetCredits()
 
@@ -450,7 +451,9 @@ export async function dbGetCredits(): Promise<number> {
   const expired = data.plan_expires_at && new Date(data.plan_expires_at) < new Date()
   if ((plan === 'pro' || plan === 'premium') && !expired) return Infinity
 
-  return data.credits_remaining ?? 0
+  const credits = data.credits_remaining ?? 0
+  lsSetCredits(credits) // keep localStorage in sync with Supabase
+  return credits
 }
 
 export async function dbCanGenerate(): Promise<boolean> {
@@ -471,9 +474,9 @@ export async function dbDeductCredit(): Promise<boolean> {
     .from('users_profile')
     .select('plan, plan_expires_at, credits_remaining')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!data) return false
+  if (!data) return true // allow generation if profile not found yet
 
   const plan = data.plan as string
   const expired = data.plan_expires_at && new Date(data.plan_expires_at) < new Date()
@@ -532,7 +535,7 @@ export async function dbGetDashboardStats() {
     const [appsRes, trackerRes, profileRes] = await Promise.all([
       supabase.from('applications').select('id, match_score, status, created_at').eq('user_id', user.id),
       supabase.from('tracker_entries').select('status').eq('user_id', user.id),
-      supabase.from('users_profile').select('plan, plan_expires_at, credits_remaining').eq('user_id', user.id).single(),
+      supabase.from('users_profile').select('plan, plan_expires_at, credits_remaining').eq('user_id', user.id).maybeSingle(),
     ])
 
     const apps = appsRes.data ?? []
@@ -542,7 +545,11 @@ export async function dbGetDashboardStats() {
     const isPaid = profile && (profile.plan === 'pro' || profile.plan === 'premium') &&
       (!profile.plan_expires_at || new Date(profile.plan_expires_at) > new Date())
 
-    const credits = isPaid ? Infinity : (profile?.credits_remaining ?? 0)
+    const credits = isPaid ? Infinity : (profile?.credits_remaining ?? lsGetCredits())
+    // Sync credits to localStorage so sidebar and dashboard always agree
+    if (!isPaid && profile?.credits_remaining != null) {
+      lsSetCredits(profile.credits_remaining)
+    }
 
     const generated = apps.filter(a => a.status === 'generated')
     const scores = generated.map(a => a.match_score ?? 0).filter(s => s > 0)
@@ -585,7 +592,7 @@ export async function dbExportUserData(): Promise<Blob> {
   const [apps, tracker, profile, transactions] = await Promise.all([
     supabase.from('applications').select('*').eq('user_id', user.id),
     supabase.from('tracker_entries').select('*').eq('user_id', user.id),
-    supabase.from('users_profile').select('*').eq('user_id', user.id).single(),
+    supabase.from('users_profile').select('*').eq('user_id', user.id).maybeSingle(),
     supabase.from('credit_transactions').select('*').eq('user_id', user.id),
   ])
 

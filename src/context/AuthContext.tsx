@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { setStorageUserId, updateUserProfile } from '@/lib/storage'
+import { setStorageUserId, updateUserProfile, setCredits as lsSetCredits } from '@/lib/storage'
 import type { User, AuthError } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('users_profile')
         .select('plan, plan_expires_at, credits_remaining')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
       if (!data) return
 
@@ -49,6 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Downgrade is handled server-side by /api/subscription/info
       setPlan(activePlan)
       updateUserProfile({ plan: activePlan })
+
+      // Sync credits from Supabase → localStorage immediately on sign-in
+      // This ensures sidebar/new-application never show a stale cached value
+      const isPaid = activePlan === 'pro' || activePlan === 'premium'
+      if (!isPaid && data.credits_remaining != null) {
+        lsSetCredits(data.credits_remaining)
+      }
     } catch {
       // Silently fail — use cached plan
     }
@@ -97,11 +104,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signUp = useCallback(async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName } },
     })
+    // Ensure profile row exists regardless of whether the DB trigger ran
+    if (!error && data.user) {
+      void supabase.from('users_profile').upsert({
+        user_id: data.user.id,
+        email,
+        full_name: fullName,
+        plan: 'free',
+        credits_remaining: 3,
+      }, { onConflict: 'user_id' })
+    }
     return { error }
   }, [supabase.auth])
 
@@ -111,10 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase.auth])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
+    // Clear local state immediately — don't wait for the network
     setUser(null)
     setPlan('free')
     setStorageUserId(null)
+    // Fire Supabase signOut in background (network call — can be slow)
+    supabase.auth.signOut().catch(() => {})
   }, [supabase.auth])
 
   return (

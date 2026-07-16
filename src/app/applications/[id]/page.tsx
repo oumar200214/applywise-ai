@@ -60,7 +60,7 @@ function parseExperienceEntries(text: string): ExperienceEntry[] {
 
 function CVSectionHeader({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-3 mb-3">
+    <div className="flex items-center gap-3 mb-2">
       <div className="w-[3px] h-4 bg-[#1B4F8A] rounded-full shrink-0"></div>
       <h2 className="text-[8.5px] font-black text-[#1B4F8A] uppercase tracking-[0.22em]">{title}</h2>
       <div className="flex-1 h-px bg-[#1B4F8A]/20"></div>
@@ -103,9 +103,9 @@ function SkillsRenderer({ text }: { text: string }) {
 
 function CVPage({ children, pageNum }: { children: React.ReactNode; pageNum: number }) {
   return (
-    <div className="bg-white shadow-2xl mx-auto w-full mb-2 relative" style={{ maxWidth: '794px', minHeight: '1123px' }}>
+    <div className="bg-white shadow-2xl mx-auto w-full mb-2 relative" style={{ maxWidth: '794px' }}>
       {children}
-      <div className="absolute bottom-5 left-0 right-0 flex justify-center">
+      <div className="flex justify-center pb-3">
         <span className="text-[8px] text-slate-300 tracking-widest">{pageNum}</span>
       </div>
     </div>
@@ -256,25 +256,17 @@ export default function ApplicationResultPage() {
             {tabs.map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 border-b-2 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-primary'}`}><span className="material-symbols-outlined text-[20px]">{tab.icon}</span>{tab.label}</button>))}
           </div>
 
-          {/* Onglet CV — Multi-page preview */}
+          {/* Onglet CV — document continu unique */}
           {activeTab === 'cv' && d?.tailored_cv && (() => {
             const cv = d.tailored_cv
             const headerLines = (cv.header_section || '').split('\n').filter(Boolean)
             const candidateName = headerLines[0] ?? ''
             const contacts = headerLines.slice(1)
-
             const expEntries = parseExperienceEntries(cv.experience_section || '')
-            const splitIdx = expEntries.length > 3 ? Math.ceil(expEntries.length / 2) : expEntries.length
-            const exp1 = expEntries.slice(0, splitIdx)
-            const exp2 = expEntries.slice(splitIdx)
-
-            const page2HasContent = !!(exp2.length || cv.education_section || cv.skills_section || cv.projects_section)
-            const page3HasContent = !!(cv.certifications_section || cv.languages_section)
-            const totalPages = 1 + (page2HasContent ? 1 : 0) + (page3HasContent ? 1 : 0)
 
             return (
               <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
-                {/* Toolbar — dark browser-like bar */}
+                {/* Toolbar */}
                 <div className="px-5 py-3 bg-[#1B2A4A] flex justify-between items-center">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
@@ -286,31 +278,25 @@ export default function ApplicationResultPage() {
                     <span className="material-symbols-outlined text-[16px] text-white/40">description</span>
                     <span className="text-xs text-white/60 font-medium truncate max-w-xs">CV — {app.jobTitle}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-white/40 font-medium hidden sm:inline">{totalPages} page{totalPages > 1 ? 's' : ''}</span>
-                    <div className="h-4 w-px bg-white/10 hidden sm:block"></div>
-                    <button
-                      onClick={handleDownloadCV}
-                      disabled={isGenerating}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-sm">download</span>
-                      {isGenerating ? 'Génération...' : 'Télécharger DOCX'}
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleDownloadCV}
+                    disabled={isGenerating}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    {isGenerating ? 'Génération...' : 'Télécharger DOCX'}
+                  </button>
                 </div>
 
-                {/* Document viewer */}
+                {/* Document viewer — single continuous card */}
                 <div className="bg-slate-600 p-4 md:p-8 overflow-y-auto" style={{ maxHeight: '900px', userSelect: 'none', WebkitUserSelect: 'none' }}>
-
-                  {/* ── PAGE 1 ── */}
-                  <CVPage pageNum={1}>
+                  <div className="bg-white shadow-2xl mx-auto w-full" style={{ maxWidth: '794px' }}>
                     {/* Header band */}
-                    <div className="bg-[#1B2A4A] px-10 py-9">
-                      <h1 className="text-[28px] font-bold text-white tracking-wide uppercase leading-tight">{candidateName || app.jobTitle}</h1>
-                      <p className="text-[#7EB5E5] text-[10px] mt-1.5 font-semibold tracking-widest uppercase">{app.jobTitle}</p>
+                    <div className="bg-[#1B2A4A] px-10 py-6">
+                      <h1 className="text-[26px] font-bold text-white tracking-wide uppercase leading-tight">{candidateName || app.jobTitle}</h1>
+                      <p className="text-[#7EB5E5] text-[10px] mt-1 font-semibold tracking-widest uppercase">{app.jobTitle}</p>
                       {contacts.length > 0 && (
-                        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-4 pt-4 border-t border-white/10">
+                        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 pt-3 border-t border-white/10">
                           {contacts.map((c: string, i: number) => (
                             <span key={i} className="text-[#A8CFF0] text-[10px]">{c}</span>
                           ))}
@@ -318,34 +304,35 @@ export default function ApplicationResultPage() {
                       )}
                     </div>
 
-                    {/* Body */}
-                    <div className="px-10 py-8 space-y-6">
+                    {/* All sections in one continuous flow */}
+                    <div className="px-10 py-6 space-y-5">
+
                       {cv.summary_section && (
                         <div>
                           <CVSectionHeader title="Profil professionnel" />
-                          <p className="text-[12px] text-slate-600 leading-relaxed italic pl-1">{cv.summary_section}</p>
+                          <p className="text-[11.5px] text-slate-600 leading-relaxed italic pl-1">{cv.summary_section}</p>
                         </div>
                       )}
 
-                      {exp1.length > 0 && (
+                      {expEntries.length > 0 && (
                         <div>
                           <CVSectionHeader title="Expérience professionnelle" />
-                          <div className="space-y-5">
-                            {exp1.map((entry, i) => (
+                          <div className="space-y-4">
+                            {expEntries.map((entry, i) => (
                               <div key={i} className="pl-1">
                                 <div className="flex justify-between items-start gap-4">
                                   <div className="min-w-0">
-                                    <p className="text-[13px] font-bold text-[#1B2A4A] leading-tight">{entry.company}</p>
-                                    {entry.title && <p className="text-[11px] text-slate-500 italic mt-0.5">{entry.title}</p>}
+                                    <p className="text-[12.5px] font-bold text-[#1B2A4A] leading-tight">{entry.company}</p>
+                                    {entry.title && <p className="text-[10.5px] text-slate-500 italic mt-0.5">{entry.title}</p>}
                                   </div>
                                   {entry.dates && (
-                                    <span className="text-[10px] text-slate-400 shrink-0 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded font-medium">{entry.dates}</span>
+                                    <span className="text-[9.5px] text-slate-400 shrink-0 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded font-medium">{entry.dates}</span>
                                   )}
                                 </div>
                                 {entry.bullets.length > 0 && (
-                                  <ul className="mt-2 space-y-1.5 ml-1">
+                                  <ul className="mt-1.5 space-y-1 ml-1">
                                     {entry.bullets.map((b, j) => (
-                                      <li key={j} className="flex gap-2 text-[11.5px] text-slate-600 leading-relaxed">
+                                      <li key={j} className="flex gap-2 text-[11px] text-slate-600 leading-snug">
                                         <span className="text-[#1B4F8A] font-black shrink-0 leading-5">›</span>
                                         <span>{b}</span>
                                       </li>
@@ -358,129 +345,50 @@ export default function ApplicationResultPage() {
                         </div>
                       )}
 
-                      {/* If no page 2, show remaining sections here */}
-                      {!page2HasContent && (
-                        <>
-                          {cv.education_section && (
-                            <div>
-                              <CVSectionHeader title="Formation" />
-                              <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-line pl-1">{cv.education_section}</div>
-                            </div>
-                          )}
-                          {cv.skills_section && (
-                            <div>
-                              <CVSectionHeader title="Compétences" />
-                              <div className="pl-1"><SkillsRenderer text={cv.skills_section} /></div>
-                            </div>
-                          )}
-                        </>
+                      {cv.education_section && (
+                        <div>
+                          <CVSectionHeader title="Formation" />
+                          <div className="text-[11px] text-slate-600 leading-snug whitespace-pre-line pl-1">{cv.education_section}</div>
+                        </div>
                       )}
+
+                      {cv.skills_section && (
+                        <div>
+                          <CVSectionHeader title="Compétences" />
+                          <div className="pl-1"><SkillsRenderer text={cv.skills_section} /></div>
+                        </div>
+                      )}
+
+                      {cv.projects_section && (
+                        <div>
+                          <CVSectionHeader title="Projets" />
+                          <div className="text-[11px] text-slate-600 leading-snug whitespace-pre-line pl-1">{cv.projects_section}</div>
+                        </div>
+                      )}
+
+                      {cv.certifications_section && (
+                        <div>
+                          <CVSectionHeader title="Certifications" />
+                          <div className="text-[11px] text-slate-600 leading-snug whitespace-pre-line pl-1">{cv.certifications_section}</div>
+                        </div>
+                      )}
+
+                      {cv.languages_section && (
+                        <div>
+                          <CVSectionHeader title="Langues" />
+                          <div className="text-[11px] text-slate-600 leading-snug whitespace-pre-line pl-1">{cv.languages_section}</div>
+                        </div>
+                      )}
+
                     </div>
-                  </CVPage>
-
-                  {/* ── PAGE SEPARATOR ── */}
-                  {page2HasContent && (
-                    <div className="flex items-center gap-4 my-4 px-2">
-                      <div className="flex-1 h-px bg-white/15"></div>
-                      <span className="text-[10px] text-white/30 font-semibold tracking-widest uppercase">Page 2</span>
-                      <div className="flex-1 h-px bg-white/15"></div>
-                    </div>
-                  )}
-
-                  {/* ── PAGE 2 ── */}
-                  {page2HasContent && (
-                    <CVPage pageNum={2}>
-                      <div className="px-10 py-10 space-y-6">
-                        {exp2.length > 0 && (
-                          <div>
-                            <CVSectionHeader title="Expérience professionnelle (suite)" />
-                            <div className="space-y-5">
-                              {exp2.map((entry, i) => (
-                                <div key={i} className="pl-1">
-                                  <div className="flex justify-between items-start gap-4">
-                                    <div className="min-w-0">
-                                      <p className="text-[13px] font-bold text-[#1B2A4A]">{entry.company}</p>
-                                      {entry.title && <p className="text-[11px] text-slate-500 italic mt-0.5">{entry.title}</p>}
-                                    </div>
-                                    {entry.dates && (
-                                      <span className="text-[10px] text-slate-400 shrink-0 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded font-medium">{entry.dates}</span>
-                                    )}
-                                  </div>
-                                  {entry.bullets.length > 0 && (
-                                    <ul className="mt-2 space-y-1.5 ml-1">
-                                      {entry.bullets.map((b, j) => (
-                                        <li key={j} className="flex gap-2 text-[11.5px] text-slate-600 leading-relaxed">
-                                          <span className="text-[#1B4F8A] font-black shrink-0 leading-5">›</span>
-                                          <span>{b}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {cv.education_section && (
-                          <div>
-                            <CVSectionHeader title="Formation" />
-                            <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-line pl-1">{cv.education_section}</div>
-                          </div>
-                        )}
-
-                        {cv.skills_section && (
-                          <div>
-                            <CVSectionHeader title="Compétences" />
-                            <div className="pl-1"><SkillsRenderer text={cv.skills_section} /></div>
-                          </div>
-                        )}
-
-                        {cv.projects_section && (
-                          <div>
-                            <CVSectionHeader title="Projets" />
-                            <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-line pl-1">{cv.projects_section}</div>
-                          </div>
-                        )}
-                      </div>
-                    </CVPage>
-                  )}
-
-                  {/* ── PAGE SEPARATOR 3 ── */}
-                  {page3HasContent && (
-                    <div className="flex items-center gap-4 my-4 px-2">
-                      <div className="flex-1 h-px bg-white/15"></div>
-                      <span className="text-[10px] text-white/30 font-semibold tracking-widest uppercase">Page 3</span>
-                      <div className="flex-1 h-px bg-white/15"></div>
-                    </div>
-                  )}
-
-                  {/* ── PAGE 3 ── */}
-                  {page3HasContent && (
-                    <CVPage pageNum={3}>
-                      <div className="px-10 py-10 space-y-6">
-                        {cv.certifications_section && (
-                          <div>
-                            <CVSectionHeader title="Certifications" />
-                            <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-line pl-1">{cv.certifications_section}</div>
-                          </div>
-                        )}
-                        {cv.languages_section && (
-                          <div>
-                            <CVSectionHeader title="Langues" />
-                            <div className="text-[11.5px] text-slate-600 leading-relaxed whitespace-pre-line pl-1">{cv.languages_section}</div>
-                          </div>
-                        )}
-                      </div>
-                    </CVPage>
-                  )}
+                  </div>
                 </div>
 
                 {/* Footer */}
                 <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-slate-300 text-[14px]">info</span>
-                    <span className="text-[11px] text-slate-400">Aperçu en lecture seule · {totalPages} page{totalPages > 1 ? 's' : ''}. Téléchargez le <strong className="text-slate-500">DOCX</strong> pour éditer.</span>
+                    <span className="text-[11px] text-slate-400">Aperçu en lecture seule. Téléchargez le <strong className="text-slate-500">DOCX</strong> pour éditer et paginer.</span>
                   </div>
                   <button onClick={handleDownloadPDF} className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors">
                     <span className="material-symbols-outlined text-[14px]">picture_as_pdf</span>PDF
@@ -490,31 +398,107 @@ export default function ApplicationResultPage() {
             )
           })()}
 
-          {/* Onglet Lettre */}
-          {activeTab === 'cover' && d?.cover_letter && (
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden min-h-[400px]">
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-                <span className="text-xs text-slate-400 font-medium">Aperçu de la lettre de motivation</span>
-                <button onClick={handleDownloadLetter} disabled={isGenerating} className="text-xs text-primary-container font-bold hover:underline flex items-center gap-1 disabled:opacity-50">
-                  <span className="material-symbols-outlined text-sm">download</span>{isGenerating ? 'Génération...' : 'Télécharger DOCX'}
-                </button>
-              </div>
-              <div className="p-10">
-                <div className="max-w-2xl mx-auto space-y-6 text-sm text-slate-700 leading-relaxed">
-                  {d.cover_letter.full_letter_text ? (
-                    <p className="whitespace-pre-line">{d.cover_letter.full_letter_text}</p>
-                  ) : (
-                    <>
-                      {d.cover_letter.opening_paragraph && <p>{d.cover_letter.opening_paragraph}</p>}
-                      {d.cover_letter.body_paragraph_1 && <p>{d.cover_letter.body_paragraph_1}</p>}
-                      {d.cover_letter.body_paragraph_2 && <p>{d.cover_letter.body_paragraph_2}</p>}
-                      {d.cover_letter.closing_paragraph && <p>{d.cover_letter.closing_paragraph}</p>}
-                    </>
-                  )}
+          {/* Onglet Lettre — A4 preview matching CV design */}
+          {activeTab === 'cover' && d?.cover_letter && (() => {
+            const letter = d.cover_letter
+            const paragraphs: string[] = letter.full_letter_text
+              ? letter.full_letter_text.split(/\n\n+/).map((p: string) => p.replace(/\n/g, ' ').trim()).filter(Boolean)
+              : [
+                  letter.opening_paragraph,
+                  letter.body_paragraph_1,
+                  letter.body_paragraph_2,
+                  letter.closing_paragraph,
+                ].filter(Boolean) as string[]
+
+            return (
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
+                {/* Toolbar */}
+                <div className="px-5 py-3 bg-[#1B2A4A] flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500/70"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500/70"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500/70"></div>
+                    </div>
+                    <div className="h-4 w-px bg-white/10 mx-1"></div>
+                    <span className="material-symbols-outlined text-[16px] text-white/40">mail</span>
+                    <span className="text-xs text-white/60 font-medium truncate max-w-xs">Lettre de motivation — {app.jobTitle}</span>
+                  </div>
+                  <button
+                    onClick={handleDownloadLetter}
+                    disabled={isGenerating}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold transition-all disabled:opacity-50 shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    {isGenerating ? 'Génération...' : 'Télécharger DOCX'}
+                  </button>
+                </div>
+
+                {/* Document viewer */}
+                <div className="bg-slate-600 p-4 md:p-8 overflow-y-auto" style={{ maxHeight: '900px', userSelect: 'none', WebkitUserSelect: 'none' }}>
+                  {/* Letter page */}
+                  <div className="bg-white shadow-2xl mx-auto w-full mb-2" style={{ maxWidth: '794px' }}>
+                    {/* Navy accent band */}
+                    <div className="bg-[#1B2A4A] px-10 py-5">
+                      <h1 className="text-[18px] font-bold text-white tracking-wide uppercase leading-tight">Lettre de motivation</h1>
+                      <p className="text-[#7EB5E5] text-[10px] mt-1 font-semibold tracking-widest uppercase">{app.jobTitle}{app.companyName ? ` · ${app.companyName}` : ''}</p>
+                    </div>
+
+                    {/* Letter body */}
+                    <div className="px-12 py-8 space-y-5">
+                      {/* Date + recipient header */}
+                      <div className="flex justify-between items-start text-[11px] text-slate-500 pb-4 border-b border-slate-100">
+                        <div>
+                          <p className="font-semibold text-[#1B2A4A]">{app.companyName || 'Entreprise cible'}</p>
+                          <p className="italic">À l&apos;attention du service recrutement</p>
+                        </div>
+                        <p className="text-right">{new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      </div>
+
+                      {/* Object line */}
+                      <p className="text-[11.5px] font-bold text-[#1B2A4A]">Objet : Candidature au poste de {app.jobTitle}</p>
+
+                      {/* Salutation */}
+                      <p className="text-[11.5px] text-slate-700">Madame, Monsieur,</p>
+
+                      {/* Paragraphs */}
+                      <div className="space-y-4">
+                        {paragraphs.map((para, i) => (
+                          <p key={i} className="text-[11.5px] text-slate-700 leading-relaxed text-justify">{para}</p>
+                        ))}
+                      </div>
+
+                      {/* Sign-off */}
+                      <div className="pt-4 border-t border-slate-100">
+                        <p className="text-[11.5px] text-slate-700 mb-6">Dans l&apos;attente de votre retour, je reste à votre disposition pour tout entretien.</p>
+                        <p className="text-[11.5px] text-slate-700">Cordialement,</p>
+                        <p className="text-[13px] font-bold text-[#1B2A4A] mt-3 tracking-wide">{(() => {
+                          const headerLines = (d.tailored_cv?.header_section || '').split('\n').filter(Boolean)
+                          return headerLines[0] || app.jobTitle
+                        })()}</p>
+                      </div>
+                    </div>
+
+                    {/* Page number */}
+                    <div className="flex justify-center pb-3">
+                      <span className="text-[8px] text-slate-300 tracking-widest">1</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-slate-300 text-[14px]">info</span>
+                    <span className="text-[11px] text-slate-400">Aperçu en lecture seule · 1 page. Téléchargez le <strong className="text-slate-500">DOCX</strong> pour éditer.</span>
+                  </div>
+                  <button onClick={handleDownloadPDF} className="text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors">
+                    <span className="material-symbols-outlined text-[14px]">picture_as_pdf</span>PDF
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Onglet Entretien */}
           {activeTab === 'interview' && d?.interview_pack && (

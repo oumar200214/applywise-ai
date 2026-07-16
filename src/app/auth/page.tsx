@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { updateUserProfile, addCredits } from '@/lib/storage'
+import { updateUserProfile } from '@/lib/storage'
 import toast from 'react-hot-toast'
 
 function AuthContent() {
@@ -25,10 +25,19 @@ function AuthContent() {
       if (isSignUp) {
         const { error } = await signUp(email, password, fullName)
         if (error) {
-          if (error.message.includes('already registered')) {
+          const msg = error.message || ''
+          if (msg.includes('already registered') || msg.includes('User already registered')) {
             toast.error('Cet e-mail est déjà enregistré. Essayez de vous connecter.')
+          } else if (msg.includes('Database error') || msg.includes('database error')) {
+            toast.error('Erreur temporaire du serveur. Réessayez dans quelques secondes.')
+          } else if (msg.includes('Email rate limit') || msg.includes('email rate')) {
+            toast.error('Trop de tentatives. Attendez quelques minutes avant de réessayer.')
+          } else if (msg.includes('Invalid email')) {
+            toast.error('Adresse e-mail invalide.')
+          } else if (msg.includes('Password should be')) {
+            toast.error('Le mot de passe doit contenir au moins 6 caractères.')
           } else {
-            toast.error(error.message || 'Impossible de créer le compte')
+            toast.error('Impossible de créer le compte. Réessayez.')
           }
           setLoading(false)
           return
@@ -39,7 +48,6 @@ function AuthContent() {
           email,
           onboardingCompleted: false,
         })
-        addCredits(3, 'Bonus de bienvenue — 3 générations IA gratuites')
 
         toast.success('Compte créé ! Configurons votre profil.')
         window.location.href = '/onboarding'

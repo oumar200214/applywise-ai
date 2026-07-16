@@ -208,6 +208,11 @@ export function getCredits(): number {
   return getItem<number>('credits', FREE_PLAN_MAX_CREDITS)
 }
 
+/** Overwrite the stored credit count (used to sync from Supabase). */
+export function setCredits(amount: number): void {
+  setItem('credits', amount)
+}
+
 /** Check if the user can generate (has credits or paid plan) */
 export function canGenerate(): boolean {
   if (hasPaidPlan()) return true
