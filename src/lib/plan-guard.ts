@@ -12,7 +12,7 @@ export type Feature =
 // ── Matrice de permissions par plan ─────────────────────────────────────────
 const PERMISSIONS: Record<string, Feature[]> = {
   free: [],
-  pro: ['unlimited_cv', 'cover_letter', 'match_score', 'certifications', 'docx_export'],
+  pro: ['unlimited_cv', 'cover_letter', 'match_score', 'certifications', 'docx_export', 'interview_sim'],
   premium: [
     'unlimited_cv',
     'cover_letter',

@@ -189,10 +189,10 @@ export default function PricingPage() {
               </div>
             </div>
             <div className="space-y-4 mb-8 flex-grow">
-              {['CVs IA illimités', 'Lettres de motivation personnalisées', 'Score de correspondance avancé', 'Recommandations de certifications', 'Export PDF & .docx natif'].map(f => (
+              {['CVs IA illimités', 'Lettres de motivation personnalisées', 'Score de correspondance avancé', 'Entretien simulé IA + coaching vocal', 'Bibliothèque 20+ questions d\'entretien', 'Export PDF & .docx natif'].map(f => (
                 <div key={f} className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-secondary">check_circle</span>
-                  <span className="text-base font-medium">{f}</span>
+                  <span className={`text-base ${f.includes('Entretien') || f.includes('Bibliothèque') ? 'font-semibold text-primary' : 'font-medium'}`}>{f}</span>
                 </div>
               ))}
             </div>
@@ -219,7 +219,7 @@ export default function PricingPage() {
               </div>
             </div>
             <div className="space-y-4 mb-8 flex-grow">
-              {['Tout ce qui est dans Pro', 'Entretiens simulés IA illimités', 'Support prioritaire'].map(f => (
+              {['Tout ce qui est dans Pro', 'Générations IA illimitées sans restriction', 'Accès prioritaire aux nouvelles fonctionnalités', 'Support prioritaire (email sous 24h)'].map(f => (
                 <div key={f} className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-secondary">check_circle</span>
                   <span className={`text-base ${f === 'Tout ce qui est dans Pro' ? 'font-bold' : ''}`}>{f}</span>
