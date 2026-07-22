@@ -86,7 +86,8 @@ function MockInterviewModal({
   const [recording, setRecording] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
   const transcriptRef = useRef('')
 
   const currentQ = questions[qIndex]
@@ -125,14 +126,15 @@ function MockInterviewModal({
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const recognition: SpeechRecognition = new (SpeechRec as any)()
+    const recognition = new (SpeechRec as any)() as any
     recognition.lang = 'fr-FR'
     recognition.continuous = true
     recognition.interimResults = true
 
     transcriptRef.current = ''
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
       let finalText = ''
       let interimText = ''
       for (let i = 0; i < event.results.length; i++) {
@@ -145,7 +147,8 @@ function MockInterviewModal({
       setAnswer((finalText + interimText).trim())
     }
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
       setRecording(false)
       if (event.error !== 'aborted' && event.error !== 'no-speech') {
         toast.error('Erreur microphone. Vérifiez les permissions dans votre navigateur.')

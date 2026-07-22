@@ -31,6 +31,8 @@ import {
   canGenerate as lsCanGenerate,
   getDashboardStats as lsGetDashboardStats,
   generateId,
+  isLocalSynced,
+  markLocalSynced,
 } from '@/lib/storage'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -235,6 +237,29 @@ export async function dbSaveGenerationResult(result: StoredResult): Promise<void
   if (!user) return
 
   const supabase = createClient()
+
+  // Guarantee the parent application row exists before inserting the result.
+  // dbSaveApplication is fire-and-forget so it may not have committed yet,
+  // and a missing FK would silently drop both rows.
+  const localApp = lsGetApplication(result.applicationId)
+  if (localApp) {
+    await supabase.from('applications').upsert({
+      id: localApp.id,
+      user_id: user.id,
+      job_title: localApp.jobTitle,
+      company_name: localApp.companyName || null,
+      job_description: localApp.jobDescription,
+      job_url: localApp.jobUrl || null,
+      country: localApp.country || null,
+      job_type: localApp.jobType || null,
+      cv_text: localApp.cvText,
+      selected_outputs: localApp.selectedOutputs,
+      tone: localApp.tone,
+      output_language: localApp.outputLanguage,
+      status: localApp.status,
+    }, { onConflict: 'id' })
+  }
+
   await supabase.from('generation_results').upsert({
     application_id: result.applicationId,
     user_id: user.id,
@@ -648,6 +673,98 @@ export async function dbDeleteAccount(): Promise<{ error: string | null }> {
   } catch {
     return { error: 'Erreur réseau' }
   }
+}
+
+// ─── BACKFILL localStorage → SUPABASE ────────────────────────────────────────
+
+/**
+ * One-time migration: copies all localStorage data (applications, results,
+ * tracker) to Supabase for users who generated apps before the DB was online.
+ * Safe to call on every login — exits immediately once the sync flag is set.
+ */
+export async function dbSyncLocalToSupabase(): Promise<void> {
+  if (isLocalSynced()) return
+
+  const user = await getCurrentUser()
+  if (!user) return
+
+  const supabase = createClient()
+  const localApps = lsGetApplications()
+
+  if (localApps.length === 0) {
+    markLocalSynced()
+    return
+  }
+
+  // Skip if Supabase already has data for this user
+  const { data: check, error: checkErr } = await supabase
+    .from('applications')
+    .select('id')
+    .eq('user_id', user.id)
+    .limit(1)
+
+  if (checkErr || (check && check.length > 0)) {
+    markLocalSynced()
+    return
+  }
+
+  // Backfill applications + generation results
+  for (const app of localApps) {
+    const { error: appErr } = await supabase.from('applications').upsert({
+      id: app.id,
+      user_id: user.id,
+      job_title: app.jobTitle,
+      company_name: app.companyName || null,
+      job_description: app.jobDescription,
+      job_url: app.jobUrl || null,
+      country: app.country || null,
+      job_type: app.jobType || null,
+      cv_text: app.cvText,
+      selected_outputs: app.selectedOutputs,
+      tone: app.tone,
+      output_language: app.outputLanguage,
+      status: app.status,
+      match_score: app.matchScore || null,
+      strong_fit_areas: app.strongFitAreas || null,
+      missing_skills: app.missingSkills || null,
+      ats_keywords: app.atsKeywords || null,
+      ai_summary: app.aiSummary || null,
+      recommended_action: app.recommendedAction || null,
+    }, { onConflict: 'id' })
+
+    if (appErr) continue
+
+    const localResult = lsGetGenerationResult(app.id)
+    if (localResult) {
+      await supabase.from('generation_results').upsert({
+        application_id: app.id,
+        user_id: user.id,
+        data: localResult.data,
+        tokens_used: localResult.tokensUsed || 0,
+        generated_at: localResult.generatedAt,
+      }, { onConflict: 'application_id' })
+    }
+  }
+
+  // Backfill tracker entries
+  const localTracker = lsGetTrackerEntries()
+  for (const entry of localTracker) {
+    await supabase.from('tracker_entries').upsert({
+      id: entry.id,
+      user_id: user.id,
+      application_id: entry.applicationId || null,
+      job_title: entry.jobTitle,
+      company_name: entry.companyName || null,
+      match_score: entry.matchScore || null,
+      status: entry.status,
+      deadline: entry.deadline || null,
+      date_applied: entry.dateApplied || null,
+      notes: entry.notes || null,
+      docs_ready: entry.docsReady,
+    }, { onConflict: 'id' })
+  }
+
+  markLocalSynced()
 }
 
 // ─── RE-EXPORT des utilitaires synchrones encore nécessaires ─────────────────

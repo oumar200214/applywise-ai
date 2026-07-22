@@ -307,6 +307,18 @@ export function deleteTrackerEntry(id: string): void {
   setItem('tracker', entries)
 }
 
+// ─── Sync State ─────────────────────────────────────────────
+
+/** Returns true if localStorage data has already been backfilled to Supabase. */
+export function isLocalSynced(): boolean {
+  return getItem<boolean>('synced', false)
+}
+
+/** Mark localStorage data as synced to Supabase (one-time flag per user). */
+export function markLocalSynced(): void {
+  setItem('synced', true)
+}
+
 // ─── Dashboard Stats (Computed) ─────────────────────────────
 
 export interface DashboardStats {

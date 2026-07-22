@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { setStorageUserId, updateUserProfile, setCredits as lsSetCredits } from '@/lib/storage'
-import { clearUserCache } from '@/lib/db'
+import { clearUserCache, dbSyncLocalToSupabase } from '@/lib/db'
 import type { User, AuthError } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -42,7 +42,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle()
 
-      if (!data) return
+      if (!data) {
+        // No profile in Supabase — create it with defaults and correct any stale localStorage credits
+        lsSetCredits(3)
+        void supabase.from('users_profile').upsert({
+          user_id: userId,
+          plan: 'free',
+          credits_remaining: 3,
+        }, { onConflict: 'user_id' })
+        return
+      }
 
       const expired = data.plan_expires_at && new Date(data.plan_expires_at) < new Date()
       const activePlan = (expired ? 'free' : data.plan ?? 'free') as 'free' | 'pro' | 'premium'
@@ -74,7 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const sessionUser = session?.user ?? null
         setUser(sessionUser)
         setStorageUserId(sessionUser?.id || null)
-        if (sessionUser) await fetchPlan(sessionUser.id)
+        if (sessionUser) {
+          await fetchPlan(sessionUser.id)
+          void dbSyncLocalToSupabase()
+        }
       } catch (error) {
         console.error('Error getting session:', error)
         setUser(null)
@@ -93,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStorageUserId(sessionUser?.id ?? null)
         if (sessionUser) {
           await fetchPlan(sessionUser.id)
+          void dbSyncLocalToSupabase()
         } else {
           setPlan('free')
         }
